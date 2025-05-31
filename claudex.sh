@@ -28,7 +28,17 @@ fi
 COMMAND="$1"
 
 if [ "$COMMAND" = "list" ]; then
-  docker ps --filter "ancestor=$IMAGE_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+  echo "=== Running Containers ==="
+  docker ps --filter "ancestor=$IMAGE_NAME" --format "{{.Names}}\t{{.Status}}"
+
+  echo ""
+  echo "=== Available Environments ==="
+  for d in "$HOME"/.claude_*; do
+    [ -d "$d" ] || continue
+    name="${d##*/.claude_}"
+    printf "%-16s %s\n" "$name" "$d"
+  done
+
   exit 0
 fi
 
