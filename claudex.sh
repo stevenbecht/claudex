@@ -1,0 +1,117 @@
+#!/bin/bash
+
+set -euo pipefail
+
+IMAGE_NAME="claudex-env"
+
+usage() {
+  echo "Usage:"
+  echo "  claudex [projname] [dir]   # Start or reattach a container"
+  echo "  claudex stop [projname]    # Stop and remove a container"
+  echo "  claudex list               # List running claudex containers"
+  echo "  claudex cleanup [projname|-a]  # Cleanup stopped containers with confirmation"
+  exit 1
+}
+
+confirm() {
+  read -rp "$1 [y/N] " confirm
+  case "$confirm" in
+    [yY][eE][sS]|[yY]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ $# -eq 0 ]; then
+  usage
+fi
+
+COMMAND="$1"
+
+if [ "$COMMAND" = "list" ]; then
+  docker ps --filter "ancestor=$IMAGE_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+  exit 0
+fi
+
+if [ "$COMMAND" = "cleanup" ]; then
+  if [ $# -ne 2 ]; then
+    echo "Usage: claudex cleanup [projname|-a]"
+    exit 1
+  fi
+
+  TARGET="$2"
+
+  if [ "$TARGET" = "-a" ]; then
+    CONTAINERS=$(docker ps -a --filter "ancestor=$IMAGE_NAME" --filter "status=exited" --format "{{.Names}}")
+    if [ -z "$CONTAINERS" ]; then
+      echo "No stopped claudex containers to clean up."
+      exit 0
+    fi
+
+    echo "Found stopped containers:"
+    echo "$CONTAINERS"
+    if confirm "Remove ALL listed containers?"; then
+      echo "$CONTAINERS" | xargs -r docker rm
+      echo "Cleanup complete."
+    else
+      echo "Cleanup cancelled."
+    fi
+
+  else
+    STATUS=$(docker inspect -f '{{.State.Status}}' "$TARGET" 2>/dev/null || true)
+    if [ "$STATUS" != "exited" ]; then
+      echo "Container '$TARGET' is not in a stopped state or doesn't exist."
+      exit 1
+    fi
+
+    if confirm "Remove stopped container '$TARGET'?"; then
+      docker rm "$TARGET"
+      echo "'$TARGET' removed."
+    else
+      echo "Cleanup cancelled."
+    fi
+  fi
+
+  exit 0
+fi
+
+if [ "$COMMAND" = "stop" ]; then
+  if [ $# -ne 2 ]; then
+    echo "Usage: claudex stop [projname]"
+    exit 1
+  fi
+  docker rm -f "$2" && echo "Stopped and removed $2"
+  exit 0
+fi
+
+if [ $# -ne 2 ]; then
+  usage
+fi
+
+PROJ="$1"
+HOST_DIR="$(realpath "$2")"
+CLAUDE_HOME="$HOME/.claude_$PROJ"
+CONTAINER_NAME="$PROJ"
+
+mkdir -p "$CLAUDE_HOME"
+
+EXISTS=$(docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format "{{.Names}}")
+
+if [ "$EXISTS" = "$CONTAINER_NAME" ]; then
+  RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")
+  if [ "$RUNNING" = "true" ]; then
+    echo "Reattaching to running container: $CONTAINER_NAME"
+    docker exec -it "$CONTAINER_NAME" bash
+  else
+    echo "Restarting and attaching to container: $CONTAINER_NAME"
+    docker start -ai "$CONTAINER_NAME"
+  fi
+else
+  echo "Starting new container: $CONTAINER_NAME"
+  docker run -it \
+    --name "$CONTAINER_NAME" \
+    -v "$HOST_DIR":"/$PROJ" \
+    -v "$CLAUDE_HOME":"/home/claudex/.claude" \
+    -w "/$PROJ" \
+    "$IMAGE_NAME"
+fi
+
