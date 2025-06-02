@@ -40,14 +40,17 @@ if [ "$COMMAND" = "list" ]; then
 
     container_exists=$(docker ps -a --filter "name=^/${name}$" --format "{{.Names}}")
 
+    src_path="(not created)"
+    last_used="(never started)"
+
     if [ "$container_exists" = "$name" ]; then
-      started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "unknown")
-      readable=$(date -d "$started" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$started")
-    else
-      readable="(never started)"
+      # Get source mount for /$name (e.g. /project-foo)
+      src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$name"'" }}{{ .Source }}{{ end }}{{ end }}' "$name" 2>/dev/null || echo "(unknown)")
+      started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "")
+      last_used=$(date -d "$started" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$started")
     fi
 
-    printf "%-16s %-40s Last used: %s\n" "$name" "$d" "$readable"
+    printf "%-16s %-30s Last used: %-20s Src: %s\n" "$name" "$d" "$last_used" "$src_path"
   done
 
   exit 0
