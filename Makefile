@@ -1,6 +1,7 @@
 # Makefile for managing the claudex Docker container
 
 IMAGE_NAME = claudex-env
+REMOTE_IMAGE_NAME = x
 DOCKERFILE = Dockerfile
 
 .PHONY: all build clean rebuild push help
