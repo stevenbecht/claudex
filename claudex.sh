@@ -36,7 +36,18 @@ if [ "$COMMAND" = "list" ]; then
   for d in "$HOME"/.claude_*; do
     [ -d "$d" ] || continue
     name="${d##*/.claude_}"
-    printf "%-16s %s\n" "$name" "$d"
+
+    # Check if container exists
+    container_exists=$(docker ps -a --filter "name=^/${name}$" --format "{{.Names}}")
+
+    if [ "$container_exists" = "$name" ]; then
+      started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "unknown")
+      readable=$(date -d "$started" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$started")
+    else
+      readable="(never started)"
+    fi
+
+    printf "%-16s %-40s Last used: %s\n" "$name" "$d" "$readable"
   done
 
   exit 0
