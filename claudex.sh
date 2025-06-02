@@ -7,8 +7,9 @@ IMAGE_NAME="claudex-env"
 usage() {
   echo "Usage:"
   echo "  claudex [projname] [dir]   # Start or reattach a container"
+  echo "  claudex [projname]         # Reattach or restart an existing container"
   echo "  claudex stop [projname]    # Stop and remove a container"
-  echo "  claudex list               # List running claudex containers"
+  echo "  claudex list               # List running containers and known environments"
   echo "  claudex cleanup [projname|-a]  # Cleanup stopped containers with confirmation"
   exit 1
 }
@@ -37,7 +38,6 @@ if [ "$COMMAND" = "list" ]; then
     [ -d "$d" ] || continue
     name="${d##*/.claude_}"
 
-    # Check if container exists
     container_exists=$(docker ps -a --filter "name=^/${name}$" --format "{{.Names}}")
 
     if [ "$container_exists" = "$name" ]; then
@@ -104,20 +104,14 @@ if [ "$COMMAND" = "stop" ]; then
   exit 0
 fi
 
-if [ $# -ne 2 ]; then
-  usage
-fi
-
+# PROJECT container start or reattach logic
 PROJ="$1"
-HOST_DIR="$(realpath "$2")"
-CLAUDE_HOME="$HOME/.claude_$PROJ"
 CONTAINER_NAME="$PROJ"
-
-mkdir -p "$CLAUDE_HOME"
+CLAUDE_HOME="$HOME/.claude_$PROJ"
 
 EXISTS=$(docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format "{{.Names}}")
 
-if [ "$EXISTS" = "$CONTAINER_NAME" ]; then
+if [ "$#" -eq 1 ] && [ "$EXISTS" = "$CONTAINER_NAME" ]; then
   RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")
   if [ "$RUNNING" = "true" ]; then
     echo "Reattaching to running container: $CONTAINER_NAME"
@@ -126,13 +120,24 @@ if [ "$EXISTS" = "$CONTAINER_NAME" ]; then
     echo "Restarting and attaching to container: $CONTAINER_NAME"
     docker start -ai "$CONTAINER_NAME"
   fi
-else
-  echo "Starting new container: $CONTAINER_NAME"
-  docker run -it \
-    --name "$CONTAINER_NAME" \
-    -v "$HOST_DIR":"/$PROJ" \
-    -v "$CLAUDE_HOME":"/home/claudex/.claude" \
-    -w "/$PROJ" \
-    "$IMAGE_NAME"
+  exit 0
 fi
+
+# New container start — requires both projname and dir
+if [ "$#" -ne 2 ]; then
+  echo "Error: Directory argument required to create new container."
+  echo "Usage: claudex [projname] [dir]"
+  exit 1
+fi
+
+HOST_DIR="$(realpath "$2")"
+mkdir -p "$CLAUDE_HOME"
+
+echo "Starting new container: $CONTAINER_NAME"
+docker run -it \
+  --name "$CONTAINER_NAME" \
+  -v "$HOST_DIR":"/$PROJ" \
+  -v "$CLAUDE_HOME":"/home/claudex/.claude" \
+  -w "/$PROJ" \
+  "$IMAGE_NAME"
 
