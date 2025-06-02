@@ -50,7 +50,7 @@ if [ "$COMMAND" = "list" ]; then
       last_used=$(date -d "$started" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$started")
     fi
 
-    printf "%-16s %-30s Last used: %-20s Src: %s\n" "$name" "$d" "$last_used" "$src_path"
+    printf "%-16s Env: %-30s Src: %-50s Last used: %s\n" "$name" "$d" "$src_path" "$last_used"
   done
 
   exit 0
