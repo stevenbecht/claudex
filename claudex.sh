@@ -140,7 +140,7 @@ echo "Starting new container: $CONTAINER_NAME"
 docker run -it \
   --name "$CONTAINER_NAME" \
   -v "$HOST_DIR":"/$PROJ" \
-  -v "$CLAUDE_HOME":"/home/claudex/.claude" \
+  -v "$CLAUDE_HOME":"/home/claudex" \
   -w "/$PROJ" \
   "$IMAGE_NAME"
 
