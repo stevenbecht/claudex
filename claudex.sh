@@ -114,13 +114,14 @@ CLAUDE_HOME="$HOME/.claude_$PROJ"
 
 EXISTS=$(docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format "{{.Names}}")
 
-if [ "$#" -eq 1 ] && [ "$EXISTS" = "$CONTAINER_NAME" ]; then
+# If container exists, attach/restart regardless of argument count
+if [ "$EXISTS" = "$CONTAINER_NAME" ]; then
   RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")
   if [ "$RUNNING" = "true" ]; then
-    echo "Reattaching to running container: $CONTAINER_NAME"
+    echo "Container '$CONTAINER_NAME' is already running. Attaching..."
     docker exec -it "$CONTAINER_NAME" bash
   else
-    echo "Restarting and attaching to container: $CONTAINER_NAME"
+    echo "Container '$CONTAINER_NAME' exists but is stopped. Restarting..."
     docker start -ai "$CONTAINER_NAME"
   fi
   exit 0
@@ -136,7 +137,7 @@ fi
 HOST_DIR="$(realpath "$2")"
 mkdir -p "$CLAUDE_HOME"
 
-echo "Starting new container: $CONTAINER_NAME"
+echo "Creating new container: $CONTAINER_NAME"
 docker run -it \
   --name "$CONTAINER_NAME" \
   -v "$HOST_DIR":"/$PROJ" \
