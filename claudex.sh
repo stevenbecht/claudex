@@ -34,9 +34,9 @@ if [ "$COMMAND" = "list" ]; then
 
   echo ""
   echo "=== Available Environments ==="
-  for d in "$HOME"/.claude_*; do
+  for d in "$HOME"/claudex/*; do
     [ -d "$d" ] || continue
-    name="${d##*/.claude_}"
+    name="${d##*/}"
 
     container_exists=$(docker ps -a --filter "name=^/${name}$" --format "{{.Names}}")
 
@@ -50,7 +50,7 @@ if [ "$COMMAND" = "list" ]; then
       last_used=$(date -d "$started" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$started")
     fi
 
-    printf "%-16s Env: %-30s Src: %-50s Last used: %s\n" "$name" "$d" "$src_path" "$last_used"
+    printf "%-16s Env: %-35s Src: %-50s Last used: %s\n" "$name" "$d" "$src_path" "$last_used"
   done
 
   exit 0
@@ -110,7 +110,7 @@ fi
 # PROJECT container start or reattach logic
 PROJ="$1"
 CONTAINER_NAME="$PROJ"
-CLAUDE_HOME="$HOME/.claude_$PROJ"
+CLAUDE_HOME="$HOME/claudex/$PROJ"
 
 EXISTS=$(docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format "{{.Names}}")
 
