@@ -1,7 +1,7 @@
 FROM node
 
 # Install sudo
-RUN apt-get update && apt-get install -y sudo
+RUN apt-get update && apt-get install -y sudo vim strace
 
 # Create user and give passwordless sudo
 RUN useradd -ms /bin/bash claudex && \
