@@ -1,2 +1,5 @@
 # temp ignore
 .claude
+
+# envs
+.env
