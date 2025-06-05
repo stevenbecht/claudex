@@ -88,14 +88,35 @@ container_running() {
 # Format uptime for display
 format_uptime() {
   local started="$1"
-  local now=$(date +%s)
-  local start_ts=$(date -d "$started" +%s 2>/dev/null || echo "0")
+  
+  # Handle empty or invalid input
+  if [ -z "$started" ] || [ "$started" = "0001-01-01T00:00:00Z" ]; then
+    echo "unknown"
+    return
+  fi
+  
+  # Convert Docker's ISO 8601 format to seconds since epoch
+  # Docker format: 2025-06-05T15:46:29.315509752Z
+  local cleaned_date="${started%%.*}"  # Remove fractional seconds
+  cleaned_date="${cleaned_date/T/ }"   # Replace T with space
+  cleaned_date="${cleaned_date%Z}"     # Remove Z suffix
+  
+  # Detect OS and use appropriate date parsing
+  local start_ts
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS (BSD date)
+    start_ts=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "$cleaned_date" +%s 2>/dev/null || echo "0")
+  else
+    # Linux (GNU date)
+    start_ts=$(date -u -d "$cleaned_date" +%s 2>/dev/null || echo "0")
+  fi
   
   if [ "$start_ts" = "0" ]; then
     echo "unknown"
     return
   fi
   
+  local now=$(date +%s)
   local diff=$((now - start_ts))
   
   if [ $diff -lt 60 ]; then
