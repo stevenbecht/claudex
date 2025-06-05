@@ -22,29 +22,40 @@ make clean
 
 ### Managing Project Environments
 ```bash
-# Start a new project environment (creates container if doesn't exist)
-./claudex.sh projname /path/to/source/code
+# Start a new project environment (first time)
+claudex start myapp --dir ~/projects/myapp
 
 # Reattach to existing project container
-./claudex.sh projname
+claudex start myapp
 
 # Stop and remove a project container
-./claudex.sh stop projname
+claudex stop myapp
 
-# List all running containers and environments
-./claudex.sh list
+# Restart an existing container
+claudex restart myapp
 
-# Clean up stopped containers (single project or all with -a)
-./claudex.sh cleanup projname
-./claudex.sh cleanup -a
+# Show all environments or specific project status
+claudex status
+claudex status myapp
+
+# View container logs (with optional live follow)
+claudex logs myapp
+claudex logs myapp --follow
+
+# Clean up stopped containers
+claudex cleanup myapp        # Single project
+claudex cleanup --all        # All stopped containers
+
+# Get help
+claudex help
 ```
 
 ## Architecture
 
 The system uses a container-per-project approach where:
-- Each project runs in its own Docker container named `claudex_[projname]`
-- Project source code is mounted from host to container at `/[projname]`
-- Environment data persists in `~/.claude_[projname]` on the host, mounted to `/home/claudex/.claude` in container
+- Each project runs in its own Docker container named `claudex_[project]`
+- Project source code is mounted from host to container at `/[project]`
+- Environment data persists in `~/claudex/[project]` on the host, mounted to `/home/claudex` in container
 - Containers can be stopped and restarted while preserving environment state
 
 ## Important Implementation Details
@@ -53,4 +64,9 @@ The system uses a container-per-project approach where:
 - The Dockerfile creates a Node.js environment with `@anthropic-ai/claude-code` and `@openai/codex` pre-installed
 - Containers run as non-root user `claudex` for security
 - The script includes safety checks and confirmation prompts for destructive operations
-- Environment timestamps are tracked in `~/.claude_[projname]/.last_used` for the list command
+- All commands provide clear feedback with color-coded status messages
+- Container names follow the pattern `claudex_[project]` for easy identification
+
+## Memories
+
+- We use the program Codex for evaluation of changes to ensure they are peer reviewed

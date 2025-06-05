@@ -3,145 +3,388 @@
 set -euo pipefail
 
 IMAGE_NAME="claudex-env"
+CONTAINER_PREFIX="claudex_"
 
-usage() {
-  echo "Usage:"
-  echo "  claudex [projname] [dir]   # Start or reattach a container"
-  echo "  claudex [projname]         # Reattach or restart an existing container"
-  echo "  claudex stop [projname]    # Stop and remove a container"
-  echo "  claudex list               # List running containers and known environments"
-  echo "  claudex cleanup [projname|-a]  # Cleanup stopped containers with confirmation"
+# Color codes for better output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Helper functions
+error() {
+  echo -e "${RED}Error:${NC} $1" >&2
   exit 1
 }
 
+success() {
+  echo -e "${GREEN}✓${NC} $1"
+}
+
+info() {
+  echo -e "${BLUE}ℹ${NC} $1"
+}
+
 confirm() {
-  read -rp "$1 [y/N] " confirm
+  read -rp "$(echo -e "${YELLOW}?${NC} $1 [y/N] ")" confirm
   case "$confirm" in
     [yY][eE][sS]|[yY]) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-if [ $# -eq 0 ]; then
-  usage
-fi
+# Show detailed help
+show_help() {
+  cat << EOF
+Claudex - Docker-based development environment manager
 
-COMMAND="$1"
+$(echo -e "${GREEN}Usage:${NC}")
+  claudex <command> [options]
 
-if [ "$COMMAND" = "list" ]; then
-  echo "=== Running Containers ==="
-  docker ps --filter "ancestor=$IMAGE_NAME" --format "{{.Names}}\t{{.Status}}"
+$(echo -e "${GREEN}Commands:${NC}")
+  start <project> [--dir PATH]  Start or attach to a project environment
+                                (--dir required only for new projects)
+  stop <project>                Stop and remove a project environment
+  restart <project>             Restart an existing environment
+  status [project]              Show environment status (all or specific)
+  logs <project> [--follow]     View container logs (--follow for live logs)
+  cleanup [--all | project]     Remove stopped containers
+  help                          Show this help message
 
-  echo ""
-  echo "=== Available Environments ==="
-  for d in "$HOME"/claudex/*; do
-    [ -d "$d" ] || continue
-    name="${d##*/}"
+$(echo -e "${GREEN}Examples:${NC}")
+  claudex start myapp --dir ~/projects/myapp   # First time setup
+  claudex start myapp                          # Reattach to existing
+  claudex status                               # List all environments
+  claudex logs myapp --follow                  # View live logs
+  claudex cleanup --all                        # Clean all stopped containers
 
-    container_exists=$(docker ps -a --filter "name=^/${name}$" --format "{{.Names}}")
+$(echo -e "${GREEN}Environment Details:${NC}")
+  - Each project runs in a container named '${CONTAINER_PREFIX}<project>'
+  - Project code is mounted at '/<project>' in the container
+  - Environment data persists in '~/claudex/<project>' on the host
+  - Containers include Claude Code and Codex pre-installed
 
-    src_path="(not created)"
-    last_used="(never started)"
+EOF
+}
 
-    if [ "$container_exists" = "$name" ]; then
-      # Get source mount for /$name (e.g. /project-foo)
-      src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$name"'" }}{{ .Source }}{{ end }}{{ end }}' "$name" 2>/dev/null || echo "(unknown)")
-      started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "")
-      last_used=$(date -d "$started" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$started")
-    fi
+# Get container name from project name
+get_container_name() {
+  echo "${CONTAINER_PREFIX}$1"
+}
 
-    printf "%-16s Env: %-35s Src: %-50s Last used: %s\n" "$name" "$d" "$src_path" "$last_used"
+# Check if container exists
+container_exists() {
+  local container="$1"
+  docker ps -a --filter "name=^/${container}$" --format "{{.Names}}" | grep -q "^${container}$"
+}
+
+# Check if container is running
+container_running() {
+  local container="$1"
+  docker ps --filter "name=^/${container}$" --format "{{.Names}}" | grep -q "^${container}$"
+}
+
+# Format uptime for display
+format_uptime() {
+  local started="$1"
+  local now=$(date +%s)
+  local start_ts=$(date -d "$started" +%s 2>/dev/null || echo "0")
+  
+  if [ "$start_ts" = "0" ]; then
+    echo "unknown"
+    return
+  fi
+  
+  local diff=$((now - start_ts))
+  
+  if [ $diff -lt 60 ]; then
+    echo "just now"
+  elif [ $diff -lt 3600 ]; then
+    echo "$((diff / 60)) minutes ago"
+  elif [ $diff -lt 86400 ]; then
+    echo "$((diff / 3600)) hours ago"
+  else
+    echo "$((diff / 86400)) days ago"
+  fi
+}
+
+# Command: start
+cmd_start() {
+  local project=""
+  local dir=""
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dir)
+        shift
+        dir="$1"
+        ;;
+      *)
+        if [ -z "$project" ]; then
+          project="$1"
+        else
+          error "Unknown argument: $1"
+        fi
+        ;;
+    esac
+    shift
   done
-
-  exit 0
-fi
-
-if [ "$COMMAND" = "cleanup" ]; then
-  if [ $# -ne 2 ]; then
-    echo "Usage: claudex cleanup [projname|-a]"
-    exit 1
-  fi
-
-  TARGET="$2"
-
-  if [ "$TARGET" = "-a" ]; then
-    CONTAINERS=$(docker ps -a --filter "ancestor=$IMAGE_NAME" --filter "status=exited" --format "{{.Names}}")
-    if [ -z "$CONTAINERS" ]; then
-      echo "No stopped claudex containers to clean up."
-      exit 0
+  
+  [ -z "$project" ] && error "Project name required. Usage: claudex start <project> [--dir PATH]"
+  
+  local container_name=$(get_container_name "$project")
+  local claude_home="$HOME/claudex/$project"
+  
+  # Check if container already exists
+  if container_exists "$container_name"; then
+    if container_running "$container_name"; then
+      info "Container '$container_name' is already running. Attaching..."
+      docker exec -it "$container_name" bash
+    else
+      info "Container '$container_name' exists but is stopped. Restarting..."
+      docker start -ai "$container_name"
     fi
+    return
+  fi
+  
+  # New container - need directory
+  [ -z "$dir" ] && error "Directory required for new project. Usage: claudex start $project --dir PATH"
+  
+  # Validate directory
+  [ ! -d "$dir" ] && error "Directory '$dir' does not exist"
+  
+  local host_dir="$(realpath "$dir")"
+  mkdir -p "$claude_home"
+  
+  info "Creating new container: $container_name"
+  info "Source directory: $host_dir"
+  info "Environment data: $claude_home"
+  
+  docker run -it \
+    --name "$container_name" \
+    -v "$host_dir":"/$project" \
+    -v "$claude_home":"/home/claudex" \
+    -w "/$project" \
+    "$IMAGE_NAME"
+}
 
-    echo "Found stopped containers:"
-    echo "$CONTAINERS"
+# Command: stop
+cmd_stop() {
+  [ $# -ne 1 ] && error "Usage: claudex stop <project>"
+  
+  local project="$1"
+  local container_name=$(get_container_name "$project")
+  
+  if ! container_exists "$container_name"; then
+    error "Container '$container_name' does not exist"
+  fi
+  
+  if confirm "Stop and remove container '$container_name'?"; then
+    docker rm -f "$container_name" >/dev/null
+    success "Container '$container_name' stopped and removed"
+  else
+    info "Operation cancelled"
+  fi
+}
+
+# Command: restart
+cmd_restart() {
+  [ $# -ne 1 ] && error "Usage: claudex restart <project>"
+  
+  local project="$1"
+  local container_name=$(get_container_name "$project")
+  
+  if ! container_exists "$container_name"; then
+    error "Container '$container_name' does not exist"
+  fi
+  
+  info "Restarting container '$container_name'..."
+  docker restart "$container_name" >/dev/null
+  success "Container restarted"
+  
+  # Attach to the restarted container
+  docker exec -it "$container_name" bash
+}
+
+# Command: status
+cmd_status() {
+  local project="${1:-}"
+  
+  if [ -n "$project" ]; then
+    # Show specific project status
+    local container_name=$(get_container_name "$project")
+    
+    if ! container_exists "$container_name"; then
+      error "Container '$container_name' does not exist"
+    fi
+    
+    local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+    local started=$(docker inspect -f '{{.State.StartedAt}}' "$container_name")
+    local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$project"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
+    
+    echo -e "\n${GREEN}Project:${NC} $project"
+    echo -e "${GREEN}Container:${NC} $container_name"
+    echo -e "${GREEN}Status:${NC} $status"
+    echo -e "${GREEN}Source:${NC} $src_path"
+    echo -e "${GREEN}Started:${NC} $(format_uptime "$started")"
+    echo
+  else
+    # Show all environments
+    echo -e "\n${GREEN}Active Environments:${NC}"
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    printf "%-20s %-12s %-20s %s\n" "PROJECT" "STATUS" "LAST STARTED" "SOURCE PATH"
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Find all claudex containers
+    local containers=$(docker ps -a --filter "name=^${CONTAINER_PREFIX}" --format "{{.Names}}")
+    
+    if [ -z "$containers" ]; then
+      echo -e "${YELLOW}No environments found.${NC} Use 'claudex start <project> --dir PATH' to create one."
+    else
+      for container in $containers; do
+        local project="${container#$CONTAINER_PREFIX}"
+        local status=$(docker inspect -f '{{.State.Status}}' "$container")
+        local started=$(docker inspect -f '{{.State.StartedAt}}' "$container")
+        local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$project"'" }}{{ .Source }}{{ end }}{{ end }}' "$container" 2>/dev/null || echo "unknown")
+        
+        # Color code status
+        case "$status" in
+          running) status_colored="${GREEN}running${NC}" ;;
+          exited) status_colored="${RED}stopped${NC}" ;;
+          *) status_colored="${YELLOW}$status${NC}" ;;
+        esac
+        
+        printf "%-20s %-25b %-20s %s\n" \
+          "$project" \
+          "$status_colored" \
+          "$(format_uptime "$started")" \
+          "$src_path"
+      done
+    fi
+    echo
+  fi
+}
+
+# Command: logs
+cmd_logs() {
+  local project=""
+  local follow=false
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --follow|-f)
+        follow=true
+        ;;
+      *)
+        if [ -z "$project" ]; then
+          project="$1"
+        else
+          error "Unknown argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+  
+  [ -z "$project" ] && error "Project name required. Usage: claudex logs <project> [--follow]"
+  
+  local container_name=$(get_container_name "$project")
+  
+  if ! container_exists "$container_name"; then
+    error "Container '$container_name' does not exist"
+  fi
+  
+  if [ "$follow" = true ]; then
+    docker logs -f "$container_name"
+  else
+    docker logs "$container_name"
+  fi
+}
+
+# Command: cleanup
+cmd_cleanup() {
+  local target="${1:-}"
+  
+  if [ "$target" = "--all" ] || [ "$target" = "-a" ]; then
+    # Clean all stopped containers
+    local containers=$(docker ps -a --filter "name=^${CONTAINER_PREFIX}" --filter "status=exited" --format "{{.Names}}")
+    
+    if [ -z "$containers" ]; then
+      info "No stopped containers to clean up"
+      return
+    fi
+    
+    echo -e "${YELLOW}Found stopped containers:${NC}"
+    for container in $containers; do
+      echo "  - $container"
+    done
+    
     if confirm "Remove ALL listed containers?"; then
-      echo "$CONTAINERS" | xargs -r docker rm
-      echo "Cleanup complete."
+      echo "$containers" | xargs -r docker rm >/dev/null
+      success "Cleanup complete"
     else
-      echo "Cleanup cancelled."
+      info "Cleanup cancelled"
     fi
-
-  else
-    STATUS=$(docker inspect -f '{{.State.Status}}' "$TARGET" 2>/dev/null || true)
-    if [ "$STATUS" != "exited" ]; then
-      echo "Container '$TARGET' is not in a stopped state or doesn't exist."
-      exit 1
+  elif [ -n "$target" ]; then
+    # Clean specific container
+    local container_name=$(get_container_name "$target")
+    
+    if ! container_exists "$container_name"; then
+      error "Container '$container_name' does not exist"
     fi
-
-    if confirm "Remove stopped container '$TARGET'?"; then
-      docker rm "$TARGET"
-      echo "'$TARGET' removed."
+    
+    local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+    if [ "$status" != "exited" ]; then
+      error "Container '$container_name' is not stopped (status: $status)"
+    fi
+    
+    if confirm "Remove stopped container '$container_name'?"; then
+      docker rm "$container_name" >/dev/null
+      success "Container '$container_name' removed"
     else
-      echo "Cleanup cancelled."
+      info "Cleanup cancelled"
     fi
-  fi
-
-  exit 0
-fi
-
-if [ "$COMMAND" = "stop" ]; then
-  if [ $# -ne 2 ]; then
-    echo "Usage: claudex stop [projname]"
-    exit 1
-  fi
-  docker rm -f "$2" && echo "Stopped and removed $2"
-  exit 0
-fi
-
-# PROJECT container start or reattach logic
-PROJ="$1"
-CONTAINER_NAME="$PROJ"
-CLAUDE_HOME="$HOME/claudex/$PROJ"
-
-EXISTS=$(docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format "{{.Names}}")
-
-# If container exists, attach/restart regardless of argument count
-if [ "$EXISTS" = "$CONTAINER_NAME" ]; then
-  RUNNING=$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")
-  if [ "$RUNNING" = "true" ]; then
-    echo "Container '$CONTAINER_NAME' is already running. Attaching..."
-    docker exec -it "$CONTAINER_NAME" bash
   else
-    echo "Container '$CONTAINER_NAME' exists but is stopped. Restarting..."
-    docker start -ai "$CONTAINER_NAME"
+    error "Usage: claudex cleanup [--all | <project>]"
   fi
-  exit 0
-fi
+}
 
-# New container start — requires both projname and dir
-if [ "$#" -ne 2 ]; then
-  echo "Error: Directory argument required to create new container."
-  echo "Usage: claudex [projname] [dir]"
-  exit 1
-fi
+# Main command dispatcher
+main() {
+  [ $# -eq 0 ] && { show_help; exit 0; }
+  
+  local command="$1"
+  shift
+  
+  case "$command" in
+    start)
+      cmd_start "$@"
+      ;;
+    stop)
+      cmd_stop "$@"
+      ;;
+    restart)
+      cmd_restart "$@"
+      ;;
+    status)
+      cmd_status "$@"
+      ;;
+    logs)
+      cmd_logs "$@"
+      ;;
+    cleanup)
+      cmd_cleanup "$@"
+      ;;
+    help|--help|-h)
+      show_help
+      ;;
+    *)
+      error "Unknown command: $command. Use 'claudex help' for usage information."
+      ;;
+  esac
+}
 
-HOST_DIR="$(realpath "$2")"
-mkdir -p "$CLAUDE_HOME"
-
-echo "Creating new container: $CONTAINER_NAME"
-docker run -it \
-  --name "$CONTAINER_NAME" \
-  -v "$HOST_DIR":"/$PROJ" \
-  -v "$CLAUDE_HOME":"/home/claudex" \
-  -w "/$PROJ" \
-  "$IMAGE_NAME"
-
+main "$@"
