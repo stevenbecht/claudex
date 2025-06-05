@@ -1,8 +1,0 @@
-sbecht@milly claudex % ./claudex.sh claudex `pwd`
-Starting new container: claudex
-docker: Error response from daemon: Conflict. The container name "/claudex" is already in use by container "d2c7b2ddecfa076ef332ce7167ee2fd08eced160353a29ea893b68c3ceac6ffd". You have to remove (or rename) that container to be able to reuse that name.
-
-Run 'docker run --help' for more information
-sbecht@milly claudex % ./claudex.sh claudex
-Restarting and attaching to container: claudex
-claudex@d2c7b2ddecfa:/claudex$
