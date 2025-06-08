@@ -1,0 +1,37 @@
+claudex@79cb4a4b6599:/ih2$ claude
+node:fs:553
+  return binding.open(
+                 ^
+
+Error: EACCES: permission denied, open '/home/claudex/.claude.json'
+    at Module.openSync (node:fs:553:18)
+    at Object.writeFileSync (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:536:1088)
+    at OU (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:559:103)
+    at Q30 (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:659:2002)
+    at Z5 (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:659:2650)
+    at bkA (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:552:1317)
+    at jE5 (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:2352:16371)
+    at xE5 (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:2352:19567)
+    at yE5 (file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:2352:19240)
+    at file:///usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js:2356:6249 {
+  errno: -13,
+  code: 'EACCES',
+  syscall: 'open',
+  path: '/home/claudex/.claude.json'
+}
+
+Node.js v24.1.0
+claudex@79cb4a4b6599:/ih2$ id
+uid=1001(claudex) gid=1001(claudex) groups=1001(claudex)
+sbecht@nova:~/src/claudex> cx start ih2
+ℹ Container 'claudex_ih2' exists but is stopped. Restarting...
+claudex@79cb4a4b6599:/ih2$ cd
+claudex@79cb4a4b6599:~$ ls
+claudex@79cb4a4b6599:~$ touch x
+touch: cannot touch 'x': Permission denied
+claudex@79cb4a4b6599:~$
+
+sbecht@nova:~/src/claudex> ls -la ~/claudex/ih2/
+total 0
+drwxr-xr-x 2 sbecht sbecht  6 Jun  6 08:53 .
+drwxr-xr-x 3 sbecht sbecht 17 Jun  6 08:53 ..
