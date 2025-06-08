@@ -47,6 +47,8 @@ $(echo -e "${GREEN}Commands:${NC}")
                                 (--dir required only for new projects)
   stop <project>                Stop and remove a project environment
   restart <project>             Restart an existing environment
+  upgrade <project> [--force]   Upgrade container to latest image
+  upgrade --all [--force]       Upgrade all containers to latest image
   status [project]              Show environment status (all or specific)
   logs <project> [--follow]     View container logs (--follow for live logs)
   cleanup [--all | project]     Remove stopped containers
@@ -55,6 +57,8 @@ $(echo -e "${GREEN}Commands:${NC}")
 $(echo -e "${GREEN}Examples:${NC}")
   claudex start myapp --dir ~/projects/myapp   # First time setup
   claudex start myapp                          # Reattach to existing
+  claudex upgrade myapp                        # Upgrade to latest image
+  claudex upgrade --all                        # Upgrade all containers
   claudex status                               # List all environments
   claudex logs myapp --follow                  # View live logs
   claudex cleanup --all                        # Clean all stopped containers
@@ -373,6 +377,152 @@ cmd_cleanup() {
   fi
 }
 
+# Command: upgrade
+cmd_upgrade() {
+  local project=""
+  local force=false
+  local upgrade_all=false
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all|-a)
+        upgrade_all=true
+        ;;
+      --force|-f)
+        force=true
+        ;;
+      *)
+        if [ -z "$project" ]; then
+          project="$1"
+        else
+          error "Unknown argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+  
+  # Validate arguments
+  if [ "$upgrade_all" = true ] && [ -n "$project" ]; then
+    error "Cannot specify both --all and a project name"
+  fi
+  
+  if [ "$upgrade_all" = false ] && [ -z "$project" ]; then
+    error "Usage: claudex upgrade <project> [--force] OR claudex upgrade --all [--force]"
+  fi
+  
+  # Function to upgrade a single container
+  upgrade_container() {
+    local proj="$1"
+    local container_name=$(get_container_name "$proj")
+    
+    if ! container_exists "$container_name"; then
+      error "Container '$container_name' does not exist"
+    fi
+    
+    # Get container configuration
+    local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+    local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
+    local claude_home=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
+    
+    # Validate mount paths
+    if [ -z "$src_path" ] || [ -z "$claude_home" ]; then
+      error "Failed to extract mount configuration from container '$container_name'"
+    fi
+    
+    # Check if container is running
+    if [ "$status" = "running" ] && [ "$force" = false ]; then
+      error "Container '$container_name' is running. Stop it first or use --force flag"
+    fi
+    
+    info "Upgrading container: $container_name"
+    info "Project directory: $src_path"
+    info "Environment data: $claude_home"
+    
+    if ! confirm "Upgrade container '$container_name' to latest image?"; then
+      info "Upgrade cancelled for '$container_name'"
+      return 1
+    fi
+    
+    # Create backup by renaming instead of removing
+    local backup_name="${container_name}_backup"
+    
+    # Check for existing backup
+    if container_exists "$backup_name"; then
+      info "Warning: Existing backup container '$backup_name' will be removed"
+      if ! confirm "Continue with upgrade?"; then
+        info "Upgrade cancelled"
+        return 1
+      fi
+      docker rm -f "$backup_name" >/dev/null 2>&1
+    fi
+    
+    # Stop and rename current container as backup
+    if ! docker stop "$container_name" >/dev/null 2>&1; then
+      error "Failed to stop container '$container_name'"
+    fi
+    
+    if ! docker rename "$container_name" "$backup_name" >/dev/null 2>&1; then
+      # Try to restart the container if rename failed
+      docker start "$container_name" >/dev/null 2>&1
+      error "Failed to create backup. Container '$container_name' remains unchanged"
+    fi
+    
+    # Create new container with same configuration
+    if docker run -d \
+      --name "$container_name" \
+      -v "$src_path":"/$proj" \
+      -v "$claude_home":"/home/claudex" \
+      -w "/$proj" \
+      "$IMAGE_NAME" \
+      tail -f /dev/null >/dev/null 2>&1; then
+      
+      # Success - remove backup
+      docker rm "$backup_name" >/dev/null 2>&1
+      success "Container '$container_name' upgraded successfully"
+      
+      # If it was running before, start interactive session
+      if [ "$status" = "running" ]; then
+        info "Reattaching to upgraded container..."
+        docker exec -it "$container_name" bash
+      fi
+    else
+      # Failed - restore backup
+      docker rename "$backup_name" "$container_name" >/dev/null 2>&1
+      docker start "$container_name" >/dev/null 2>&1
+      error "Upgrade failed for '$container_name'. Container restored to previous state"
+    fi
+  }
+  
+  if [ "$upgrade_all" = true ]; then
+    # Find all claudex containers
+    local containers=$(docker ps -a --filter "name=^${CONTAINER_PREFIX}" --format "{{.Names}}")
+    
+    if [ -z "$containers" ]; then
+      info "No containers found to upgrade"
+      return
+    fi
+    
+    local count=$(echo "$containers" | wc -w)
+    info "Found $count container(s) to upgrade"
+    
+    local upgraded=0
+    for container in $containers; do
+      local proj="${container#$CONTAINER_PREFIX}"
+      echo
+      if upgrade_container "$proj"; then
+        ((upgraded++))
+      fi
+    done
+    
+    echo
+    success "Upgraded $upgraded out of $count containers"
+  else
+    upgrade_container "$project"
+  fi
+}
+
 # Main command dispatcher
 main() {
   [ $# -eq 0 ] && { show_help; exit 0; }
@@ -398,6 +548,9 @@ main() {
       ;;
     cleanup)
       cmd_cleanup "$@"
+      ;;
+    upgrade)
+      cmd_upgrade "$@"
       ;;
     help|--help|-h)
       show_help
