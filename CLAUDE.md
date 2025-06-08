@@ -34,6 +34,17 @@ claudex stop myapp
 # Restart an existing container
 claudex restart myapp
 
+# Upgrade container to latest image after rebuild
+claudex upgrade myapp        # Single project (container must be stopped)
+claudex upgrade --all        # All containers
+claudex upgrade myapp --force # Force upgrade even if running
+
+# Upgrade workflow:
+# 1. Rebuild the image: make rebuild
+# 2. Upgrade containers: claudex upgrade myapp
+# Note: The upgrade process creates a backup, replaces the container,
+#       and restores the original if upgrade fails
+
 # Show all environments or specific project status
 claudex status
 claudex status myapp

@@ -151,6 +151,7 @@ When reviewing changes, verify:
    - Ensure containers can be stopped/started without data loss
    - Verify cleanup operations don't remove active containers
    - Check that restart operations handle both running and stopped states
+   - Validate upgrade backup/restore mechanism works correctly
 
 2. **Path Handling**
    - Absolute vs relative path resolution
@@ -182,6 +183,14 @@ Consider these scenarios when evaluating changes:
    ```bash
    claudex status  # Should list all projects
    claudex cleanup --all  # Should only remove stopped containers
+   ```
+
+4. **Container Upgrade After Image Rebuild**
+   ```bash
+   make rebuild  # Rebuild the Docker image
+   claudex upgrade myapp  # Upgrade single container
+   claudex upgrade --all  # Upgrade all containers
+   # Note: Upgrade creates backup and restores on failure
    ```
 
 ## Performance Considerations
