@@ -70,3 +70,6 @@ The system uses a container-per-project approach where:
 ## Memories
 
 - We use the program Codex for evaluation of changes to ensure they are peer reviewed
+- IMPORTANT: When asked to consult with Codex, use the command: `codex "your question here"`
+- We are running inside a container, so we cannot test Docker commands directly
+- Always consult Codex when implementing significant features or when explicitly asked
