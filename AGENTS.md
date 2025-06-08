@@ -2,9 +2,26 @@
 
 This file provides context and guidance for AI agents (like Codex) when reviewing code and interactions in the Claudex project.
 
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Code Review Guidelines](#code-review-guidelines)
+  - [Architecture Principles](#architecture-principles)
+  - [Code Quality Standards](#code-quality-standards)
+  - [Key Components to Review](#key-components-to-review)
+- [Code Style & Testing](#code-style--testing)
+- [Contribution Workflow](#contribution-workflow)
+- [Review Checklist](#review-checklist)
+- [Common Issues to Watch For](#common-issues-to-watch-for)
+- [Integration Testing Scenarios](#integration-testing-scenarios)
+- [Performance Considerations](#performance-considerations)
+- [Security Review Points](#security-review-points)
+
 ## Project Overview
 
 Claudex is a Docker-based development environment manager that creates isolated, project-specific containers with AI coding assistants pre-installed. It follows a container-per-project architecture where each project gets its own named container with persistent environment data.
+
+For detailed usage instructions, run `claudex help` or refer to the [CLAUDE.md](./CLAUDE.md) file.
 
 ## Code Review Guidelines
 
@@ -40,6 +57,80 @@ When reviewing changes or interactions in this project, consider:
    - Build targets correctness
    - Dependency management
    - Clean operations completeness
+
+## Code Style & Testing
+
+### Shell Script Standards
+- Use `shellcheck` to validate bash scripts for common issues
+- Follow consistent indentation (2 spaces preferred)
+- Quote all variables to handle spaces properly: `"$var"` not `$var`
+- Use `set -euo pipefail` for error handling in scripts
+- Prefer `[[ ]]` over `[ ]` for conditionals in bash
+
+### Testing Requirements
+- **Unit Tests**: Not currently implemented, but shell scripts can be tested with `bats` (Bash Automated Testing System)
+- **Integration Tests**: Test the full container lifecycle:
+  ```bash
+  # Test creating a new project
+  ./claudex.sh start testproject --dir /tmp/testproject
+  
+  # Test reconnecting to existing project
+  ./claudex.sh stop testproject
+  ./claudex.sh start testproject
+  
+  # Test cleanup
+  ./claudex.sh cleanup testproject
+  ```
+- **Build Tests**: Verify Docker image builds successfully:
+  ```bash
+  make clean && make build
+  ```
+
+### Pre-Review Validation
+Before submitting changes, run:
+```bash
+# Validate shell scripts
+shellcheck claudex.sh
+
+# Test Docker build
+make rebuild
+
+# Run basic integration test
+./claudex.sh help
+```
+
+## Contribution Workflow
+
+### Branch Naming Convention
+- Feature branches: `feature/description-of-feature`
+- Bug fixes: `fix/issue-description`
+- Documentation: `docs/what-is-being-documented`
+
+### Commit Message Format
+Follow conventional commits:
+```
+type(scope): brief description
+
+Longer explanation if needed
+
+Fixes #123
+```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+### Pull Request Process
+1. Create feature branch from `main`
+2. Make changes following code style guidelines
+3. Test changes thoroughly (see Testing Requirements)
+4. Update documentation if needed
+5. Submit PR with clear description of changes
+6. Ensure all review checklist items are addressed
+
+### Pre-commit Checks
+Consider adding these checks before committing:
+- Run `shellcheck` on modified shell scripts
+- Verify `make build` succeeds if Dockerfile changed
+- Update CLAUDE.md if adding new commands/features
 
 ## Review Checklist
 
