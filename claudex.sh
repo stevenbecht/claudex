@@ -45,7 +45,8 @@ $(echo -e "${GREEN}Usage:${NC}")
 $(echo -e "${GREEN}Commands:${NC}")
   start <project> [--dir PATH]  Start or attach to a project environment
                                 (--dir required only for new projects)
-  stop <project>                Stop and remove a project environment
+  stop <project>                Stop a running container (keeps it for later)
+  remove <project>              Remove a container (stopped or running)
   restart <project>             Restart an existing environment
   upgrade <project>             Upgrade container to latest image
   upgrade --all                 Upgrade all containers to latest image
@@ -206,9 +207,14 @@ cmd_stop() {
     error "Container '$container_name' does not exist"
   fi
   
-  if confirm "Stop and remove container '$container_name'?"; then
-    docker rm -f "$container_name" >/dev/null
-    success "Container '$container_name' stopped and removed"
+  if ! container_running "$container_name"; then
+    info "Container '$container_name' is already stopped"
+    return
+  fi
+  
+  if confirm "Stop container '$container_name'?"; then
+    docker stop "$container_name" >/dev/null
+    success "Container '$container_name' stopped"
   else
     info "Operation cancelled"
   fi
@@ -231,6 +237,34 @@ cmd_restart() {
   
   # Attach to the restarted container
   docker exec -it "$container_name" bash
+}
+
+# Command: remove
+cmd_remove() {
+  [ $# -ne 1 ] && error "Usage: claudex remove <project>"
+  
+  local project="$1"
+  local container_name=$(get_container_name "$project")
+  
+  if ! container_exists "$container_name"; then
+    error "Container '$container_name' does not exist"
+  fi
+  
+  local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+  local status_msg=""
+  
+  case "$status" in
+    running) status_msg=" (currently running)" ;;
+    exited) status_msg=" (stopped)" ;;
+    *) status_msg=" (status: $status)" ;;
+  esac
+  
+  if confirm "Remove container '$container_name'$status_msg?"; then
+    docker rm -f "$container_name" >/dev/null
+    success "Container '$container_name' removed"
+  else
+    info "Operation cancelled"
+  fi
 }
 
 # Command: status
@@ -565,6 +599,9 @@ main() {
       ;;
     stop)
       cmd_stop "$@"
+      ;;
+    remove)
+      cmd_remove "$@"
       ;;
     restart)
       cmd_restart "$@"

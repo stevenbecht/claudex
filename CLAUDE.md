@@ -28,8 +28,11 @@ claudex start myapp --dir ~/projects/myapp
 # Reattach to existing project container
 claudex start myapp
 
-# Stop and remove a project container
+# Stop a running container (keeps it for later)
 claudex stop myapp
+
+# Remove a container (stopped or running)
+claudex remove myapp
 
 # Restart an existing container
 claudex restart myapp
