@@ -25,6 +25,9 @@ make clean
 # Start a new project environment (first time)
 claudex start myapp --dir ~/projects/myapp
 
+# Start with port mappings (e.g., host:container)
+claudex start myapp --dir ~/projects/myapp --port 8080,3000:3000
+
 # Reattach to existing project container
 claudex start myapp
 

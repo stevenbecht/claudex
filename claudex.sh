@@ -43,8 +43,10 @@ $(echo -e "${GREEN}Usage:${NC}")
   claudex <command> [options]
 
 $(echo -e "${GREEN}Commands:${NC}")
-  start <project> [--dir PATH]  Start or attach to a project environment
+  start <project> [--dir PATH] [--port PORTS]
+                                Start or attach to a project environment
                                 (--dir required only for new projects)
+                                (--port for port mappings, e.g. 8080,3000:3000)
   stop <project>                Stop a running container (keeps it for later)
   remove <project>              Remove a container (stopped or running)
   restart <project>             Restart an existing environment
@@ -57,6 +59,7 @@ $(echo -e "${GREEN}Commands:${NC}")
 
 $(echo -e "${GREEN}Examples:${NC}")
   claudex start myapp --dir ~/projects/myapp   # First time setup
+  claudex start myapp --dir ~/projects/myapp --port 8080,3000:3000  # With ports
   claudex start myapp                          # Reattach to existing
   claudex upgrade myapp                        # Upgrade to latest image
   claudex upgrade --all                        # Upgrade all containers
@@ -139,6 +142,7 @@ format_uptime() {
 cmd_start() {
   local project=""
   local dir=""
+  local ports=""
   
   # Parse arguments
   while [[ $# -gt 0 ]]; do
@@ -146,6 +150,10 @@ cmd_start() {
       --dir)
         shift
         dir="$1"
+        ;;
+      --port|-p)
+        shift
+        ports="$1"
         ;;
       *)
         if [ -z "$project" ]; then
@@ -158,7 +166,7 @@ cmd_start() {
     shift
   done
   
-  [ -z "$project" ] && error "Project name required. Usage: claudex start <project> [--dir PATH]"
+  [ -z "$project" ] && error "Project name required. Usage: claudex start <project> [--dir PATH] [--port PORTS]"
   
   local container_name=$(get_container_name "$project")
   local claude_home="$HOME/claudex/$project"
@@ -176,7 +184,7 @@ cmd_start() {
   fi
   
   # New container - need directory
-  [ -z "$dir" ] && error "Directory required for new project. Usage: claudex start $project --dir PATH"
+  [ -z "$dir" ] && error "Directory required for new project. Usage: claudex start $project --dir PATH [--port PORTS]"
   
   # Validate directory
   [ ! -d "$dir" ] && error "Directory '$dir' does not exist"
@@ -184,11 +192,24 @@ cmd_start() {
   local host_dir="$(realpath "$dir")"
   mkdir -p "$claude_home"
   
+  # Assemble any -p flags for docker run
+  local port_args=()
+  if [ -n "$ports" ]; then
+    IFS=',' read -r -a __port_list <<< "$ports"
+    for __p in "${__port_list[@]}"; do
+      # Trim whitespace
+      __p=$(echo "$__p" | xargs)
+      port_args+=( -p "$__p" )
+    done
+  fi
+  
   info "Creating new container: $container_name"
   info "Source directory: $host_dir"
   info "Environment data: $claude_home"
+  [ -z "$ports" ] || info "Port mappings: $ports"
   
   docker run -it \
+    "${port_args[@]}" \
     --name "$container_name" \
     -v "$host_dir":"/$project" \
     -v "$claude_home":"/home/claudex" \
@@ -288,6 +309,10 @@ cmd_status() {
     echo -e "${GREEN}Status:${NC} $status"
     echo -e "${GREEN}Source:${NC} $src_path"
     echo -e "${GREEN}Started:${NC} $(format_uptime "$started")"
+    
+    # Show published ports without touching the table
+    local ports_info=$(docker port "$container_name" 2>/dev/null | paste -sd ',' - || echo "none")
+    echo -e "${GREEN}Ports:${NC} $ports_info"
     echo
   else
     # Show all environments
