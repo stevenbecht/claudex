@@ -47,8 +47,8 @@ $(echo -e "${GREEN}Commands:${NC}")
                                 (--dir required only for new projects)
   stop <project>                Stop and remove a project environment
   restart <project>             Restart an existing environment
-  upgrade <project> [--force]   Upgrade container to latest image
-  upgrade --all [--force]       Upgrade all containers to latest image
+  upgrade <project>             Upgrade container to latest image
+  upgrade --all                 Upgrade all containers to latest image
   status [project]              Show environment status (all or specific)
   logs <project> [--follow]     View container logs (--follow for live logs)
   cleanup [--all | project]     Remove stopped containers
@@ -380,7 +380,6 @@ cmd_cleanup() {
 # Command: upgrade
 cmd_upgrade() {
   local project=""
-  local force=false
   local upgrade_all=false
   
   # Parse arguments
@@ -388,9 +387,6 @@ cmd_upgrade() {
     case "$1" in
       --all|-a)
         upgrade_all=true
-        ;;
-      --force|-f)
-        force=true
         ;;
       *)
         if [ -z "$project" ]; then
@@ -409,7 +405,7 @@ cmd_upgrade() {
   fi
   
   if [ "$upgrade_all" = false ] && [ -z "$project" ]; then
-    error "Usage: claudex upgrade <project> [--force] OR claudex upgrade --all [--force]"
+    error "Usage: claudex upgrade <project> OR claudex upgrade --all"
   fi
   
   # Function to upgrade a single container
@@ -421,8 +417,7 @@ cmd_upgrade() {
       error "Container '$container_name' does not exist"
     fi
     
-    # Get container configuration
-    local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+    # Get container configuration before removal
     local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
     local claude_home=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
     
@@ -431,68 +426,49 @@ cmd_upgrade() {
       error "Failed to extract mount configuration from container '$container_name'"
     fi
     
-    # Check if container is running
-    if [ "$status" = "running" ] && [ "$force" = false ]; then
-      error "Container '$container_name' is running. Stop it first or use --force flag"
+    # Check if container is currently running
+    local was_running=false
+    if container_running "$container_name"; then
+      was_running=true
     fi
     
     info "Upgrading container: $container_name"
     info "Project directory: $src_path"
-    info "Environment data: $claude_home"
     
     if ! confirm "Upgrade container '$container_name' to latest image?"; then
       info "Upgrade cancelled for '$container_name'"
       return 1
     fi
     
-    # Create backup by renaming instead of removing
-    local backup_name="${container_name}_backup"
+    # Remove old container
+    docker rm -f "$container_name" >/dev/null 2>&1
     
-    # Check for existing backup
-    if container_exists "$backup_name"; then
-      info "Warning: Existing backup container '$backup_name' will be removed"
-      if ! confirm "Continue with upgrade?"; then
-        info "Upgrade cancelled"
-        return 1
-      fi
-      docker rm -f "$backup_name" >/dev/null 2>&1
-    fi
-    
-    # Stop and rename current container as backup
-    if ! docker stop "$container_name" >/dev/null 2>&1; then
-      error "Failed to stop container '$container_name'"
-    fi
-    
-    if ! docker rename "$container_name" "$backup_name" >/dev/null 2>&1; then
-      # Try to restart the container if rename failed
-      docker start "$container_name" >/dev/null 2>&1
-      error "Failed to create backup. Container '$container_name' remains unchanged"
-    fi
-    
-    # Create new container with same configuration
-    if docker run -d \
+    # Recreate container with same mounts (in stopped state)
+    if ! docker create \
       --name "$container_name" \
       -v "$src_path":"/$proj" \
       -v "$claude_home":"/home/claudex" \
       -w "/$proj" \
-      "$IMAGE_NAME" \
-      tail -f /dev/null >/dev/null 2>&1; then
-      
-      # Success - remove backup
-      docker rm "$backup_name" >/dev/null 2>&1
-      success "Container '$container_name' upgraded successfully"
-      
-      # If it was running before, start interactive session
-      if [ "$status" = "running" ]; then
-        info "Reattaching to upgraded container..."
-        docker exec -it "$container_name" bash
+      -it \
+      "$IMAGE_NAME" >/dev/null 2>&1; then
+      error "Failed to recreate container '$container_name' after upgrade"
+    fi
+    
+    success "Container '$container_name' upgraded successfully"
+    
+    # If it was running, offer to start it
+    if [ "$was_running" = true ]; then
+      if confirm "Container was running. Start it now?"; then
+        info "Starting upgraded container..."
+        docker start -ai "$container_name"
+      else
+        info "Use 'claudex start $proj' to start the upgraded container"
       fi
     else
-      # Failed - restore backup
-      docker rename "$backup_name" "$container_name" >/dev/null 2>&1
-      docker start "$container_name" >/dev/null 2>&1
-      error "Upgrade failed for '$container_name'. Container restored to previous state"
+      info "Use 'claudex start $proj' to start the upgraded container"
     fi
+    
+    return 0
   }
   
   if [ "$upgrade_all" = true ]; then
@@ -505,19 +481,72 @@ cmd_upgrade() {
     fi
     
     local count=$(echo "$containers" | wc -w)
+    local running_containers=()
+    
     info "Found $count container(s) to upgrade"
     
-    local upgraded=0
+    # First pass: upgrade all containers
     for container in $containers; do
       local proj="${container#$CONTAINER_PREFIX}"
       echo
-      if upgrade_container "$proj"; then
-        ((upgraded++))
+      
+      # Get container configuration before removal
+      local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container")
+      local claude_home=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container")
+      
+      # Skip if we can't extract mount configuration
+      if [ -z "$src_path" ] || [ -z "$claude_home" ]; then
+        error "Failed to extract mount configuration from container '$container' - skipping"
+        continue
+      fi
+      
+      # Check if running before upgrade
+      if container_running "$container"; then
+        running_containers+=("$proj")
+      fi
+      
+      info "Upgrading container: $container"
+      info "Project directory: $src_path"
+      
+      # Remove old container
+      docker rm -f "$container" >/dev/null 2>&1
+      
+      # Recreate container with same mounts (in stopped state)
+      if docker create \
+        --name "$container" \
+        -v "$src_path":"/$proj" \
+        -v "$claude_home":"/home/claudex" \
+        -w "/$proj" \
+        -it \
+        "$IMAGE_NAME" >/dev/null 2>&1; then
+        success "Container '$container' upgraded"
+      else
+        error "Failed to recreate container '$container' after upgrade"
       fi
     done
     
     echo
-    success "Upgraded $upgraded out of $count containers"
+    success "All containers upgraded successfully"
+    
+    # Handle previously running containers
+    if [ ${#running_containers[@]} -gt 0 ]; then
+      echo
+      echo -e "${YELLOW}The following containers were running:${NC}"
+      for proj in "${running_containers[@]}"; do
+        echo "  - $proj"
+      done
+      
+      if confirm "Start all previously running containers?"; then
+        for proj in "${running_containers[@]}"; do
+          local container_name=$(get_container_name "$proj")
+          info "Starting $proj..."
+          docker start "$container_name" >/dev/null 2>&1
+        done
+        info "All previously running containers have been started"
+      else
+        info "Use 'claudex start <project>' to start containers individually"
+      fi
+    fi
   else
     upgrade_container "$project"
   fi
