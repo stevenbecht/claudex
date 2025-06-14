@@ -209,7 +209,7 @@ cmd_start() {
   [ -z "$ports" ] || info "Port mappings: $ports"
   
   docker run -it \
-    "${port_args[@]}" \
+    ${port_args[@]+"${port_args[@]}"} \
     --name "$container_name" \
     -v "$host_dir":"/$project" \
     -v "$claude_home":"/home/claudex" \
