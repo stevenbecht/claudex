@@ -5,6 +5,10 @@ set -euo pipefail
 IMAGE_NAME="claudex-env"
 CONTAINER_PREFIX="claudex_"
 
+# Get the real path of the script, following symlinks
+SCRIPT_PATH="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
 # Color codes for better output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -50,6 +54,7 @@ $(echo -e "${GREEN}Commands:${NC}")
   stop <project>                Stop a running container (keeps it for later)
   remove <project>              Remove a container (stopped or running)
   restart <project>             Restart an existing environment
+  rebuild                       Rebuild the Docker image from scratch
   upgrade <project>             Upgrade container to latest image
   upgrade --all                 Upgrade all containers to latest image
   status [project]              Show environment status (all or specific)
@@ -612,6 +617,77 @@ cmd_upgrade() {
   fi
 }
 
+# Command: rebuild
+cmd_rebuild() {
+  local keep_versions=3
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keep-versions|-k)
+        shift
+        keep_versions="$1"
+        ;;
+      *)
+        error "Unknown argument: $1"
+        ;;
+    esac
+    shift
+  done
+  
+  # Validate we can find the Dockerfile
+  if [ ! -f "$SCRIPT_DIR/Dockerfile" ]; then
+    error "Cannot find Dockerfile at $SCRIPT_DIR/Dockerfile"
+  fi
+  
+  info "Rebuilding Docker image in: $SCRIPT_DIR"
+  
+  # Generate timestamp tag
+  local timestamp=$(date +"%Y%m%d-%H%M%S")
+  local versioned_tag="${IMAGE_NAME}:${timestamp}"
+  
+  # Check if old image exists
+  if docker images -q "$IMAGE_NAME" >/dev/null 2>&1; then
+    info "Current image found, will rebuild with version tag: $timestamp"
+  fi
+  
+  # Build with version tag
+  info "Building new image: $versioned_tag"
+  if ! docker build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
+    error "Docker build failed"
+  fi
+  
+  # Tag as latest (production)
+  info "Tagging as production: $IMAGE_NAME"
+  docker tag "$versioned_tag" "$IMAGE_NAME"
+  
+  success "Image rebuilt successfully"
+  echo -e "${GREEN}Version:${NC} $versioned_tag"
+  echo -e "${GREEN}Production tag:${NC} $IMAGE_NAME"
+  
+  # Clean up old versions if requested
+  if [ "$keep_versions" -gt 0 ]; then
+    info "Keeping last $keep_versions versions"
+    
+    # Get all claudex-env versions sorted by creation date
+    local all_versions=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^${IMAGE_NAME}:" | grep -E ":[0-9]{8}-[0-9]{6}$" | sort -r)
+    local count=0
+    
+    while IFS= read -r version; do
+      count=$((count + 1))
+      if [ $count -gt $keep_versions ]; then
+        info "Removing old version: $version"
+        docker rmi "$version" >/dev/null 2>&1 || true
+      fi
+    done <<< "$all_versions"
+  fi
+  
+  # Show final image list
+  echo
+  echo -e "${GREEN}Available images:${NC}"
+  docker images --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}\t{{.Size}}" | grep "^${IMAGE_NAME}" || true
+}
+
 # Main command dispatcher
 main() {
   [ $# -eq 0 ] && { show_help; exit 0; }
@@ -631,6 +707,9 @@ main() {
       ;;
     restart)
       cmd_restart "$@"
+      ;;
+    rebuild)
+      cmd_rebuild "$@"
       ;;
     status)
       cmd_status "$@"
