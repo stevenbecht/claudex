@@ -10,8 +10,15 @@ RUN useradd -ms /bin/bash claudex && \
     echo 'claudex ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/claudex && \
     chmod 0440 /etc/sudoers.d/claudex
 
+# Copy update script
+COPY scripts/update-packages.sh /usr/local/bin/update-packages
+RUN chmod +x /usr/local/bin/update-packages
+
 USER claudex
 WORKDIR /home/claudex
+
+# Create alias for easy update command
+RUN echo 'alias update="update-packages"' >> /home/claudex/.bashrc
 
 # Configure npm to use user-local path
 #RUN mkdir -p /home/claudex/.npm-global && \
