@@ -34,6 +34,17 @@ RUN chmod +x /usr/local/bin/qdrant-manager
 COPY scripts/cq-wrapper.sh /usr/local/bin/cq
 RUN chmod +x /usr/local/bin/cq
 
+# Set up MCP Codex Server
+COPY mcp-codex-server /opt/mcp-codex-server
+RUN cd /opt/mcp-codex-server && \
+    npm install && \
+    chmod +x index.js && \
+    chown -R claudex:claudex /opt/mcp-codex-server
+
+# Copy MCP codex wrapper script
+COPY scripts/mcp-codex-wrapper.sh /usr/local/bin/mcp-codex-wrapper
+RUN chmod +x /usr/local/bin/mcp-codex-wrapper
+
 USER claudex
 WORKDIR /home/claudex
 

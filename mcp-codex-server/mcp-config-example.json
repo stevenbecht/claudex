@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "codex": {
+      "command": "node",
+      "args": ["/opt/mcp-codex-server/index.js"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  },
+  "_comment": "This is an example MCP configuration for Claude Desktop or other MCP clients",
+  "_usage": "Add this configuration to your MCP client settings",
+  "_dockerUsage": "When running in Claudex containers, use: mcp-codex-wrapper"
+}

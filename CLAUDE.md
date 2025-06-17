@@ -163,9 +163,31 @@ The system uses a container-per-project approach where:
 - All commands provide clear feedback with color-coded status messages
 - Container names follow the pattern `claudex_[project]` for easy identification
 
+## MCP Codex Server Integration
+
+To ensure proper and consistent use of Codex for peer review, an MCP (Model Context Protocol) server is available that provides structured tools for Codex interaction:
+
+### Available MCP Tools:
+- **codex_review**: Request code reviews with automatic project context inclusion
+- **codex_consult**: Get implementation guidance and best practices
+- **codex_status**: Get project status summary
+- **codex_history**: View past consultation sessions
+
+### Benefits:
+- Automatic environment setup (API keys, .env loading)
+- Docker-compatible quiet mode by default
+- Structured error handling and clear feedback
+- Prevents common mistakes like missing quotes or environment variables
+
+### Usage:
+When MCP is configured, use the tools directly instead of raw commands:
+- Instead of: `codex "review changes"`
+- Use: `codex_review` tool with prompt "review the recent changes"
+
 ## Memories
 
 - We use the program Codex for evaluation of changes to ensure they are peer reviewed
 - IMPORTANT: When asked to consult with Codex, use the command: `codex "your question here"`
+- PREFERRED: When MCP is available, use the codex_review, codex_consult tools instead of direct commands
 - We are running inside a container, so we cannot test Docker commands directly
 - Always consult Codex when implementing significant features or when explicitly asked

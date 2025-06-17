@@ -1,0 +1,20 @@
+{
+  "name": "mcp-codex-server",
+  "version": "1.0.0",
+  "description": "MCP server for Codex integration - provides proper interface for code review and consultation",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["mcp", "codex", "code-review"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}
