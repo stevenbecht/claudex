@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codex": {
+      "command": "mcp-codex-wrapper",
+      "args": [],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}

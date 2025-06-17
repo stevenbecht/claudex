@@ -179,6 +179,14 @@ To ensure proper and consistent use of Codex for peer review, an MCP (Model Cont
 - Structured error handling and clear feedback
 - Prevents common mistakes like missing quotes or environment variables
 
+### Setup:
+To enable the MCP Codex server in Claude Code, run:
+```bash
+claude mcp add codex mcp-codex-wrapper
+```
+
+This only needs to be done once per container. The server will then be available for all Claude Code sessions.
+
 ### Usage:
 When MCP is configured, use the tools directly instead of raw commands:
 - Instead of: `codex "review changes"`
