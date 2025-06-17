@@ -108,6 +108,43 @@ Qdrant features:
 - Automatically detects architecture (aarch64 for Mac, x86_64 for Linux)
 - No additional containers or complex networking required
 
+### Using CodeQuery (cq) for AI-Powered Code Search
+Each container includes CodeQuery (cq), a tool that uses Qdrant and OpenAI to embed and search your codebase:
+
+```bash
+# Set your OpenAI API key (required)
+export OPENAI_API_KEY='your-api-key-here'
+
+# Or save it in a .env file for persistence
+echo "OPENAI_API_KEY=your-api-key-here" >> .env
+
+# Start Qdrant first (CodeQuery uses it for vector storage)
+qstart  # or: claudex qdrant myapp start
+
+# Embed your codebase into Qdrant
+cq embed /path/to/code --project myproject
+
+# Search your codebase with natural language
+cq search "function that handles authentication" --project myproject
+
+# Interactive chat with code context
+cq chat --project myproject
+
+# View embedding statistics
+cq stats --project myproject
+
+# Apply code changes from chat (XML diff format)
+cq diff changes.xml --project myproject
+```
+
+CodeQuery features:
+- Natural language code search using embeddings
+- Interactive chat with codebase context
+- Language-aware code parsing
+- Incremental embedding updates
+- XML-based diff application
+- Works seamlessly with the integrated Qdrant instance
+
 ## Architecture
 
 The system uses a container-per-project approach where:
@@ -120,6 +157,7 @@ The system uses a container-per-project approach where:
 
 - The main entry point is `claudex.sh` which handles all container lifecycle management
 - The Dockerfile creates a Node.js environment with `@anthropic-ai/claude-code` and `@openai/codex` pre-installed
+- CodeQuery is installed in a Python venv at `/opt/codequery` with the `cq` command available globally
 - Containers run as non-root user `claudex` for security
 - The script includes safety checks and confirmation prompts for destructive operations
 - All commands provide clear feedback with color-coded status messages

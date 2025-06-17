@@ -1,7 +1,10 @@
 FROM node
 
-# Install sudo
-RUN apt-get update && apt-get install -y sudo vim strace
+# Install sudo and Python dependencies
+RUN apt-get update && apt-get install -y \
+    sudo vim strace \
+    python3 python3-pip python3-venv git \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
@@ -10,6 +13,15 @@ RUN useradd -ms /bin/bash claudex && \
     echo 'claudex ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/claudex && \
     chmod 0440 /etc/sudoers.d/claudex
 
+# Set up CodeQuery in a system-wide location
+RUN mkdir -p /opt/codequery && \
+    python3 -m venv /opt/codequery/venv && \
+    /opt/codequery/venv/bin/pip install --upgrade pip && \
+    cd /opt/codequery && \
+    git clone https://github.com/stevenbecht/codequery.git repo && \
+    /opt/codequery/venv/bin/pip install -e ./repo && \
+    chown -R claudex:claudex /opt/codequery
+
 # Copy update script
 COPY scripts/update-packages.sh /usr/local/bin/update-packages
 RUN chmod +x /usr/local/bin/update-packages
@@ -17,6 +29,10 @@ RUN chmod +x /usr/local/bin/update-packages
 # Copy qdrant manager script
 COPY scripts/qdrant-manager.sh /usr/local/bin/qdrant-manager
 RUN chmod +x /usr/local/bin/qdrant-manager
+
+# Copy codequery wrapper script
+COPY scripts/cq-wrapper.sh /usr/local/bin/cq
+RUN chmod +x /usr/local/bin/cq
 
 USER claudex
 WORKDIR /home/claudex
