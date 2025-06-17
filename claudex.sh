@@ -47,6 +47,7 @@ $(echo -e "${GREEN}Usage:${NC}")
   claudex <command> [options]
 
 $(echo -e "${GREEN}Commands:${NC}")
+  init                          First-time setup (builds image, creates symlink)
   start <project> [--dir PATH] [--port PORTS]
                                 Start or attach to a project environment
                                 (--dir required only for new projects)
@@ -442,6 +443,114 @@ cmd_cleanup() {
   fi
 }
 
+# Command: init
+cmd_init() {
+  echo -e "${GREEN}Welcome to Claudex!${NC}"
+  echo "Setting up your development environment manager..."
+  echo
+  
+  # Check Docker is installed
+  if ! command -v docker &> /dev/null; then
+    error "Docker is not installed. Please install Docker first: https://docs.docker.com/get-docker/"
+  fi
+  
+  # Check if Docker daemon is running
+  if ! docker info &> /dev/null; then
+    error "Docker daemon is not running. Please start Docker and try again."
+  fi
+  
+  info "Docker is installed and running ✓"
+  
+  # Check if image already exists
+  if docker images -q "$IMAGE_NAME" &> /dev/null && [ -n "$(docker images -q "$IMAGE_NAME" 2>/dev/null)" ]; then
+    info "Docker image '$IMAGE_NAME' already exists"
+    if confirm "Rebuild the image anyway?"; then
+      cmd_rebuild
+    else
+      info "Using existing image"
+    fi
+  else
+    info "Building Docker image for the first time..."
+    
+    # Validate we can find the Dockerfile
+    if [ ! -f "$SCRIPT_DIR/Dockerfile" ]; then
+      error "Cannot find Dockerfile at $SCRIPT_DIR/Dockerfile"
+    fi
+    
+    # Build with timestamp
+    local timestamp=$(date +"%Y%m%d-%H%M%S")
+    local versioned_tag="${IMAGE_NAME}:${timestamp}"
+    
+    if ! docker build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
+      error "Docker build failed"
+    fi
+    
+    # Tag as production
+    docker tag "$versioned_tag" "$IMAGE_NAME"
+    success "Docker image built successfully"
+  fi
+  
+  # Offer to create symlink
+  echo
+  local symlink_created=false
+  local target_locations=("/usr/local/bin/claudex" "/usr/local/bin/cx")
+  
+  for target in "${target_locations[@]}"; do
+    local name=$(basename "$target")
+    
+    # Check if symlink already exists
+    if [ -L "$target" ] && [ "$(readlink -f "$target" 2>/dev/null)" = "$SCRIPT_PATH" ]; then
+      info "Symlink '$name' already exists at $target ✓"
+      symlink_created=true
+      continue
+    fi
+    
+    # Check if file exists but is not our symlink
+    if [ -e "$target" ]; then
+      info "File already exists at $target (not a symlink to claudex)"
+      continue
+    fi
+    
+    # Offer to create symlink
+    if confirm "Create system-wide command '$name' at $target?"; then
+      if sudo ln -sf "$SCRIPT_PATH" "$target"; then
+        success "Created symlink: $target → $SCRIPT_PATH"
+        symlink_created=true
+      else
+        info "Failed to create symlink at $target (permission denied?)"
+      fi
+    fi
+  done
+  
+  # Show next steps
+  echo
+  echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+  echo -e "${GREEN}✓ Claudex is ready to use!${NC}"
+  echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+  echo
+  echo -e "${BLUE}Next steps:${NC}"
+  
+  if [ "$symlink_created" = true ]; then
+    echo "1. Start a new project:"
+    echo "   claudex start myproject --dir ~/path/to/project"
+    echo
+    echo "2. Or use the short command:"
+    echo "   cx start myproject --dir ~/path/to/project"
+  else
+    echo "1. Add this directory to your PATH:"
+    echo "   export PATH=\"$SCRIPT_DIR:\$PATH\""
+    echo
+    echo "2. Or run directly:"
+    echo "   $SCRIPT_PATH start myproject --dir ~/path/to/project"
+  fi
+  
+  echo
+  echo "3. Get help anytime:"
+  echo "   claudex help"
+  echo
+  echo -e "${GREEN}Happy coding! 🚀${NC}"
+}
+
 # Command: upgrade
 cmd_upgrade() {
   local project=""
@@ -696,6 +805,9 @@ main() {
   shift
   
   case "$command" in
+    init)
+      cmd_init "$@"
+      ;;
     start)
       cmd_start "$@"
       ;;
