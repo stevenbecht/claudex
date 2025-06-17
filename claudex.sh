@@ -178,7 +178,8 @@ cmd_start() {
       docker exec -it "$container_name" bash
     else
       info "Container '$container_name' exists but is stopped. Restarting..."
-      docker start -ai "$container_name"
+      docker start "$container_name" >/dev/null
+      docker exec -it "$container_name" bash
     fi
     return
   fi
