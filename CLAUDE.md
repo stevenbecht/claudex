@@ -67,6 +67,47 @@ claudex cleanup --all        # All stopped containers
 claudex help
 ```
 
+### Managing Qdrant Vector Database
+Each project container can run its own Qdrant instance for vector search capabilities:
+
+```bash
+# Start Qdrant in a project (downloads binary on first use)
+claudex qdrant myapp start
+
+# Stop Qdrant
+claudex qdrant myapp stop
+
+# Check Qdrant status
+claudex qdrant myapp status
+
+# View Qdrant logs
+claudex qdrant myapp logs
+claudex qdrant myapp logs -f  # Follow logs
+
+# Restart Qdrant
+claudex qdrant myapp restart
+
+# Clean Qdrant data (requires confirmation)
+claudex qdrant myapp clean
+```
+
+Inside the container, you can also use these shortcuts:
+```bash
+qstart   # Start Qdrant
+qstop    # Stop Qdrant
+qs       # Check status
+qlogs    # Follow logs
+qdrant   # Full qdrant-manager command
+```
+
+Qdrant features:
+- Runs on port 6333 by default (configurable with QDRANT_PORT env var)
+- API endpoint: http://localhost:6333
+- Dashboard: http://localhost:6333/dashboard
+- Data persists in ~/claudex/[project]/.qdrant/
+- Automatically detects architecture (aarch64 for Mac, x86_64 for Linux)
+- No additional containers or complex networking required
+
 ## Architecture
 
 The system uses a container-per-project approach where:

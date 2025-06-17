@@ -61,6 +61,7 @@ $(echo -e "${GREEN}Commands:${NC}")
   status [project]              Show environment status (all or specific)
   logs <project> [--follow]     View container logs (--follow for live logs)
   cleanup [--all | project]     Remove stopped containers
+  qdrant <project> <action>     Manage Qdrant in a project (start/stop/status/logs)
   help                          Show this help message
 
 $(echo -e "${GREEN}Examples:${NC}")
@@ -72,6 +73,8 @@ $(echo -e "${GREEN}Examples:${NC}")
   claudex status                               # List all environments
   claudex logs myapp --follow                  # View live logs
   claudex cleanup --all                        # Clean all stopped containers
+  claudex qdrant myapp start                   # Start Qdrant in project
+  claudex qdrant myapp status                  # Check Qdrant status
 
 $(echo -e "${GREEN}Environment Details:${NC}")
   - Each project runs in a container named '${CONTAINER_PREFIX}<project>'
@@ -726,6 +729,62 @@ cmd_upgrade() {
   fi
 }
 
+# Command: qdrant
+cmd_qdrant() {
+  [ $# -lt 2 ] && error "Usage: claudex qdrant <project> <action> [options]"
+  
+  local project="$1"
+  local action="$2"
+  shift 2
+  
+  local container_name=$(get_container_name "$project")
+  
+  # Check if container exists
+  if ! container_exists "$container_name"; then
+    error "Container '$container_name' does not exist. Use 'claudex start $project' first."
+  fi
+  
+  # Check if container is running
+  if ! container_running "$container_name"; then
+    error "Container '$container_name' is not running. Use 'claudex start $project' first."
+  fi
+  
+  # Execute qdrant-manager command inside the container
+  case "$action" in
+    start)
+      info "Starting Qdrant in project '$project'..."
+      docker exec -it "$container_name" qdrant-manager start "$@"
+      ;;
+    stop)
+      info "Stopping Qdrant in project '$project'..."
+      docker exec -it "$container_name" qdrant-manager stop "$@"
+      ;;
+    restart)
+      info "Restarting Qdrant in project '$project'..."
+      docker exec -it "$container_name" qdrant-manager restart "$@"
+      ;;
+    status)
+      docker exec -it "$container_name" qdrant-manager status "$@"
+      ;;
+    logs)
+      docker exec -it "$container_name" qdrant-manager logs "$@"
+      ;;
+    install)
+      info "Installing Qdrant in project '$project'..."
+      docker exec -it "$container_name" qdrant-manager install "$@"
+      ;;
+    clean)
+      docker exec -it "$container_name" qdrant-manager clean "$@"
+      ;;
+    help|--help|-h)
+      docker exec -it "$container_name" qdrant-manager help
+      ;;
+    *)
+      error "Unknown qdrant action: $action. Valid actions: start, stop, restart, status, logs, install, clean, help"
+      ;;
+  esac
+}
+
 # Command: rebuild
 cmd_rebuild() {
   local keep_versions=3
@@ -834,6 +893,9 @@ main() {
       ;;
     upgrade)
       cmd_upgrade "$@"
+      ;;
+    qdrant)
+      cmd_qdrant "$@"
       ;;
     help|--help|-h)
       show_help

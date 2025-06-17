@@ -14,11 +14,22 @@ RUN useradd -ms /bin/bash claudex && \
 COPY scripts/update-packages.sh /usr/local/bin/update-packages
 RUN chmod +x /usr/local/bin/update-packages
 
+# Copy qdrant manager script
+COPY scripts/qdrant-manager.sh /usr/local/bin/qdrant-manager
+RUN chmod +x /usr/local/bin/qdrant-manager
+
 USER claudex
 WORKDIR /home/claudex
 
-# Create alias for easy update command
-RUN echo 'alias update="update-packages"' >> /home/claudex/.bashrc
+# Create aliases for easy commands
+RUN echo 'alias update="update-packages"' >> /home/claudex/.bashrc && \
+    echo 'alias qdrant="qdrant-manager"' >> /home/claudex/.bashrc && \
+    echo '' >> /home/claudex/.bashrc && \
+    echo '# Qdrant shortcuts' >> /home/claudex/.bashrc && \
+    echo 'alias qs="qdrant-manager status"' >> /home/claudex/.bashrc && \
+    echo 'alias qstart="qdrant-manager start"' >> /home/claudex/.bashrc && \
+    echo 'alias qstop="qdrant-manager stop"' >> /home/claudex/.bashrc && \
+    echo 'alias qlogs="qdrant-manager logs -f"' >> /home/claudex/.bashrc
 
 # Configure npm to use user-local path
 #RUN mkdir -p /home/claudex/.npm-global && \
