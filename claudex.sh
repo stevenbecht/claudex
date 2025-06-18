@@ -81,6 +81,7 @@ $(echo -e "${GREEN}Environment Details:${NC}")
   - Project code is mounted at '/<project>' in the container
   - Environment data persists in '~/claudex/<project>' on the host
   - Containers include Claude Code and Codex pre-installed
+  - Qdrant starts automatically on container entry (disable with CLAUDEX_AUTO_START_QDRANT=false)
 
 EOF
 }

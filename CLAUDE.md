@@ -97,6 +97,7 @@ qstart   # Start Qdrant
 qstop    # Stop Qdrant
 qs       # Check status
 qlogs    # Follow logs
+qstatus  # Check auto-start configuration and recent logs
 qdrant   # Full qdrant-manager command
 ```
 
@@ -107,6 +108,36 @@ Qdrant features:
 - Data persists in ~/claudex/[project]/.qdrant/
 - Automatically detects architecture (aarch64 for Mac, x86_64 for Linux)
 - No additional containers or complex networking required
+
+#### Automatic Qdrant Startup
+Qdrant now starts automatically when you enter a Claudex container. This ensures it's always available for tools like CodeQuery.
+
+**How it works:**
+- Qdrant starts automatically via Docker entrypoint when entering a container
+- Works regardless of how you enter the container (`claudex start`, `docker exec`, etc.)
+- If already running, it won't start a duplicate instance
+- Startup is silent by default, but shows a brief confirmation on first start
+- All startup attempts are logged to `~/.qdrant/startup.log`
+- The entrypoint ensures consistent behavior across all entry methods
+
+**Controlling auto-start behavior:**
+```bash
+# Disable auto-start for a session
+export CLAUDEX_AUTO_START_QDRANT=false
+
+# Enable verbose startup messages
+export CLAUDEX_QDRANT_STARTUP_QUIET=false
+
+# Make settings permanent by adding to .env file
+echo "CLAUDEX_AUTO_START_QDRANT=false" >> ~/.env
+```
+
+**Troubleshooting:**
+- Check auto-start status and logs: `qstatus`
+- View detailed startup logs: `cat ~/.qdrant/startup.log`
+- Verify Qdrant status: `qs` or `qdrant-manager status`
+- View live Qdrant logs: `qlogs`
+- Manually start if needed: `qstart` or `qdrant-manager start`
 
 ### Using CodeQuery (cq) for AI-Powered Code Search
 Each container includes CodeQuery (cq), a tool that uses Qdrant and OpenAI to embed and search your codebase:

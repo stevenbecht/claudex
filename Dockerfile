@@ -45,6 +45,14 @@ RUN cd /opt/mcp-codex-server && \
 COPY scripts/mcp-codex-wrapper.sh /usr/local/bin/mcp-codex-wrapper
 RUN chmod +x /usr/local/bin/mcp-codex-wrapper
 
+# Copy entrypoint script
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Copy Qdrant status helper
+COPY scripts/qdrant-status.sh /usr/local/bin/qdrant-status
+RUN chmod +x /usr/local/bin/qdrant-status
+
 USER claudex
 WORKDIR /home/claudex
 
@@ -56,7 +64,32 @@ RUN echo 'alias update="update-packages"' >> /home/claudex/.bashrc && \
     echo 'alias qs="qdrant-manager status"' >> /home/claudex/.bashrc && \
     echo 'alias qstart="qdrant-manager start"' >> /home/claudex/.bashrc && \
     echo 'alias qstop="qdrant-manager stop"' >> /home/claudex/.bashrc && \
-    echo 'alias qlogs="qdrant-manager logs -f"' >> /home/claudex/.bashrc
+    echo 'alias qlogs="qdrant-manager logs -f"' >> /home/claudex/.bashrc && \
+    echo 'alias qstatus="qdrant-status"' >> /home/claudex/.bashrc && \
+    echo '' >> /home/claudex/.bashrc && \
+    echo '# Auto-start Qdrant on login (unless disabled)' >> /home/claudex/.bashrc && \
+    echo '# Set CLAUDEX_AUTO_START_QDRANT=false to disable auto-start' >> /home/claudex/.bashrc && \
+    echo '# Set CLAUDEX_QDRANT_STARTUP_QUIET=false to see startup messages' >> /home/claudex/.bashrc && \
+    echo 'if [ "${CLAUDEX_AUTO_START_QDRANT:-true}" = "true" ]; then' >> /home/claudex/.bashrc && \
+    echo '  # Log startup attempt' >> /home/claudex/.bashrc && \
+    echo '  mkdir -p ~/.qdrant' >> /home/claudex/.bashrc && \
+    echo '  echo "[$(date)] Attempting Qdrant auto-start via .bashrc" >> ~/.qdrant/startup.log' >> /home/claudex/.bashrc && \
+    echo '  ' >> /home/claudex/.bashrc && \
+    echo '  # Start Qdrant with optional quiet mode' >> /home/claudex/.bashrc && \
+    echo '  if [ "${CLAUDEX_QDRANT_STARTUP_QUIET:-true}" = "false" ]; then' >> /home/claudex/.bashrc && \
+    echo '    if qdrant-manager start; then' >> /home/claudex/.bashrc && \
+    echo '      echo "[$(date)] Qdrant started successfully via .bashrc" >> ~/.qdrant/startup.log' >> /home/claudex/.bashrc && \
+    echo '    else' >> /home/claudex/.bashrc && \
+    echo '      echo "[$(date)] Qdrant startup failed or already running via .bashrc" >> ~/.qdrant/startup.log' >> /home/claudex/.bashrc && \
+    echo '    fi' >> /home/claudex/.bashrc && \
+    echo '  else' >> /home/claudex/.bashrc && \
+    echo '    if qdrant-manager start >/dev/null 2>&1; then' >> /home/claudex/.bashrc && \
+    echo '      echo "[$(date)] Qdrant started successfully via .bashrc (quiet mode)" >> ~/.qdrant/startup.log' >> /home/claudex/.bashrc && \
+    echo '    else' >> /home/claudex/.bashrc && \
+    echo '      echo "[$(date)] Qdrant startup failed or already running via .bashrc (quiet mode)" >> ~/.qdrant/startup.log' >> /home/claudex/.bashrc && \
+    echo '    fi' >> /home/claudex/.bashrc && \
+    echo '  fi' >> /home/claudex/.bashrc && \
+    echo 'fi' >> /home/claudex/.bashrc
 
 # Configure npm to use user-local path
 #RUN mkdir -p /home/claudex/.npm-global && \
@@ -69,4 +102,6 @@ RUN echo 'alias update="update-packages"' >> /home/claudex/.bashrc && \
 # Install binaries globally without root
 #RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
+# Use entrypoint to ensure Qdrant starts regardless of how container is entered
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bash", "--login"]
