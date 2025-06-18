@@ -2,7 +2,7 @@ FROM node
 
 # Install sudo and Python dependencies
 RUN apt-get update && apt-get install -y \
-    sudo vim strace \
+    sudo vim strace jq \
     python3 python3-pip python3-venv git \
     && rm -rf /var/lib/apt/lists/*
 
