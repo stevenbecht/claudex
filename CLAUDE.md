@@ -113,10 +113,15 @@ Each container includes CodeQuery (cq), a tool that uses Qdrant and OpenAI to em
 
 ```bash
 # Set your OpenAI API key (required)
+# Option 1: Set it temporarily for this session
 export OPENAI_API_KEY='your-api-key-here'
 
-# Or save it in a .env file for persistence
+# Option 2: Save it in a .env file for automatic loading
 echo "OPENAI_API_KEY=your-api-key-here" >> .env
+
+# The cq command will automatically load the .env file from:
+# 1. Current directory (.env)
+# 2. Home directory (~/.env) if not found in current directory
 
 # Start Qdrant first (CodeQuery uses it for vector storage)
 qstart  # or: claudex qdrant myapp start
@@ -158,6 +163,8 @@ The system uses a container-per-project approach where:
 - The main entry point is `claudex.sh` which handles all container lifecycle management
 - The Dockerfile creates a Node.js environment with `@anthropic-ai/claude-code` and `@openai/codex` pre-installed
 - CodeQuery is installed in a Python venv at `/opt/codequery` with the `cq` command available globally
+- Both `cq` and `mcp-codex-wrapper` automatically load `.env` files for consistent environment variable handling
+- Environment variables (like `OPENAI_API_KEY`) are loaded from `.env` in current directory first, then `~/.env` as fallback
 - Containers run as non-root user `claudex` for security
 - The script includes safety checks and confirmation prompts for destructive operations
 - All commands provide clear feedback with color-coded status messages

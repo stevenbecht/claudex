@@ -7,6 +7,16 @@ CQ_VENV="/opt/codequery/venv"
 CQ_PYTHON="$CQ_VENV/bin/python"
 CQ_COMMAND="$CQ_VENV/bin/cq"
 
+# Source .env if it exists in the current directory
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs -0)
+fi
+
+# If still no OPENAI_API_KEY, try home directory .env
+if [ -z "$OPENAI_API_KEY" ] && [ -f "$HOME/.env" ]; then
+    export $(grep -v '^#' "$HOME/.env" | grep "OPENAI_API_KEY" | xargs -0)
+fi
+
 # Check if OPENAI_API_KEY is set
 if [ -z "$OPENAI_API_KEY" ]; then
     echo "Warning: OPENAI_API_KEY environment variable is not set."
