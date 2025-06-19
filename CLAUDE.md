@@ -16,8 +16,23 @@ make build
 # Force rebuild from scratch
 make rebuild
 
+# Rebuild keeping old image versions (default: 3)
+make rebuild --keep-versions=5
+
 # Remove the Docker image
 make clean
+
+# Push image to registry (if configured)
+make push
+
+# Show available make commands
+make help
+```
+
+### Initial Setup
+```bash
+# First-time setup (builds image and creates symlinks)
+claudex init
 ```
 
 ### Managing Project Environments
@@ -43,7 +58,6 @@ claudex restart myapp
 # Upgrade container to latest image after rebuild
 claudex upgrade myapp        # Single project (container must be stopped)
 claudex upgrade --all        # All containers
-claudex upgrade myapp --force # Force upgrade even if running
 
 # Upgrade workflow:
 # 1. Rebuild the image: make rebuild
