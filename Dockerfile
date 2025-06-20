@@ -1,4 +1,4 @@
-FROM node
+FROM node:22
 
 # Install sudo and Python dependencies
 RUN apt-get update && apt-get install -y \
