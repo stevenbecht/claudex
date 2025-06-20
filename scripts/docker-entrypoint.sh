@@ -3,6 +3,28 @@
 # Docker entrypoint script for Claudex containers
 # This ensures Qdrant auto-start works regardless of how the container is entered
 
+# Function to ensure MCP configuration exists
+ensure_mcp_config() {
+  # Check if .mcp.json already exists in home directory
+  if [ ! -f "$HOME/.mcp.json" ]; then
+    # Create the MCP configuration for Codex server
+    cat > "$HOME/.mcp.json" << 'EOF'
+{
+  "mcpServers": {
+    "codex": {
+      "command": "mcp-codex-wrapper",
+      "args": [],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
+EOF
+    echo "✓ MCP configuration initialized at ~/.mcp.json"
+  fi
+}
+
 # Function to start Qdrant if enabled
 start_qdrant_if_enabled() {
   # Check if auto-start is enabled (default: true)
@@ -42,6 +64,9 @@ start_qdrant_if_enabled() {
     echo "[$(date)] Qdrant auto-start disabled via CLAUDEX_AUTO_START_QDRANT=false" >> ~/.qdrant/startup.log
   fi
 }
+
+# Initialize environment on container startup
+ensure_mcp_config
 
 # Start Qdrant if this is the main process
 if [ "$1" = "bash" ] || [ -z "$1" ]; then

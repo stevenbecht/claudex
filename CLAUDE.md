@@ -217,7 +217,12 @@ The system uses a container-per-project approach where:
 
 ## MCP Codex Server Integration
 
-To ensure proper and consistent use of Codex for peer review, an MCP (Model Context Protocol) server is available that provides structured tools for Codex interaction:
+The MCP Codex server is automatically available in all Claudex containers. No manual setup is required.
+
+### Automatic Configuration:
+- MCP configuration is automatically created at `~/.mcp.json` when a container starts
+- The configuration persists across container restarts
+- All projects in the container share the same MCP configuration
 
 ### Available MCP Tools:
 - **codex_review**: Request code reviews with automatic project context inclusion
@@ -226,23 +231,24 @@ To ensure proper and consistent use of Codex for peer review, an MCP (Model Cont
 - **codex_history**: View past consultation sessions
 
 ### Benefits:
+- Zero configuration required - works out of the box
 - Automatic environment setup (API keys, .env loading)
 - Docker-compatible quiet mode by default
 - Structured error handling and clear feedback
 - Prevents common mistakes like missing quotes or environment variables
 
-### Setup:
-To enable the MCP Codex server in Claude Code, run:
-```bash
-claude mcp add codex mcp-codex-wrapper
-```
-
-This only needs to be done once per container. The server will then be available for all Claude Code sessions.
-
 ### Usage:
-When MCP is configured, use the tools directly instead of raw commands:
-- Instead of: `codex "review changes"`
+The MCP Codex tools are automatically available in Claude Code:
 - Use: `codex_review` tool with prompt "review the recent changes"
+- Use: `codex_consult` tool for implementation guidance
+- Use: `codex_status` tool to check project status
+- Use: `codex_history` tool to view past sessions
+
+### Customization:
+If you need to customize the MCP configuration:
+1. Edit `~/.mcp.json` in your container
+2. Your changes will persist across container restarts
+3. To reset to defaults, delete `~/.mcp.json` and restart the container
 
 ## Memories
 
