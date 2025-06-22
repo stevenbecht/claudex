@@ -219,14 +219,9 @@ cmd_start() {
   info "Environment data: $claude_home"
   [ -z "$ports" ] || info "Port mappings: $ports"
   
-  # Get host user's UID/GID for proper permissions
-  local host_uid=$(id -u)
-  local host_gid=$(id -g)
-  
   docker run -it \
     ${port_args[@]+"${port_args[@]}"} \
     --name "$container_name" \
-    --user "$host_uid:$host_gid" \
     -v "$host_dir":"/$project" \
     -v "$claude_home":"/home/claudex" \
     -w "/$project" \
@@ -626,14 +621,9 @@ cmd_upgrade() {
     # Remove old container
     docker rm -f "$container_name" >/dev/null 2>&1
     
-    # Get host user's UID/GID for proper permissions
-    local host_uid=$(id -u)
-    local host_gid=$(id -g)
-    
     # Recreate container with same mounts (in stopped state)
     if ! docker create \
       --name "$container_name" \
-      --user "$host_uid:$host_gid" \
       -v "$src_path":"/$proj" \
       -v "$claude_home":"/home/claudex" \
       -w "/$proj" \
@@ -699,14 +689,9 @@ cmd_upgrade() {
       # Remove old container
       docker rm -f "$container" >/dev/null 2>&1
       
-      # Get host user's UID/GID for proper permissions
-      local host_uid=$(id -u)
-      local host_gid=$(id -g)
-      
       # Recreate container with same mounts (in stopped state)
       if docker create \
         --name "$container" \
-        --user "$host_uid:$host_gid" \
         -v "$src_path":"/$proj" \
         -v "$claude_home":"/home/claudex" \
         -w "/$proj" \
