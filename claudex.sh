@@ -227,12 +227,8 @@ cmd_start() {
     ${port_args[@]+"${port_args[@]}"} \
     --name "$container_name" \
     --user "$host_uid:$host_gid" \
-    -e HOME=/home/claudex \
-    -e USER=claudex \
     -v "$host_dir":"/$project" \
     -v "$claude_home":"/home/claudex" \
-    -v "$HOME/.ssh":"/home/claudex/.ssh:ro" \
-    -v "$HOME/.gitconfig":"/home/claudex/.gitconfig:ro" \
     -w "/$project" \
     "$IMAGE_NAME"
 }
@@ -638,12 +634,8 @@ cmd_upgrade() {
     if ! docker create \
       --name "$container_name" \
       --user "$host_uid:$host_gid" \
-      -e HOME=/home/claudex \
-      -e USER=claudex \
       -v "$src_path":"/$proj" \
       -v "$claude_home":"/home/claudex" \
-      -v "$HOME/.ssh":"/home/claudex/.ssh:ro" \
-      -v "$HOME/.gitconfig":"/home/claudex/.gitconfig:ro" \
       -w "/$proj" \
       -it \
       "$IMAGE_NAME" >/dev/null 2>&1; then
@@ -715,12 +707,8 @@ cmd_upgrade() {
       if docker create \
         --name "$container" \
         --user "$host_uid:$host_gid" \
-        -e HOME=/home/claudex \
-        -e USER=claudex \
         -v "$src_path":"/$proj" \
         -v "$claude_home":"/home/claudex" \
-        -v "$HOME/.ssh":"/home/claudex/.ssh:ro" \
-        -v "$HOME/.gitconfig":"/home/claudex/.gitconfig:ro" \
         -w "/$proj" \
         -it \
         "$IMAGE_NAME" >/dev/null 2>&1; then
