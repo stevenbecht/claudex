@@ -8,10 +8,8 @@ RUN apt-get update && apt-get install -y \
 
 RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
-# Create user with high UID to avoid conflicts with host users
-# Using 10001 which is unlikely to conflict with regular user UIDs
-RUN groupadd -g 10001 claudex && \
-    useradd -ms /bin/bash -u 10001 -g 10001 claudex && \
+# Create user and give passwordless sudo
+RUN useradd -ms /bin/bash claudex && \
     echo 'claudex ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/claudex && \
     chmod 0440 /etc/sudoers.d/claudex
 

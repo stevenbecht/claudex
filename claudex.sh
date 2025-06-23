@@ -219,14 +219,7 @@ cmd_start() {
   info "Environment data: $claude_home"
   [ -z "$ports" ] || info "Port mappings: $ports"
   
-  # On Linux, run as host user to avoid permission issues
-  local user_args=()
-  if [[ "$OSTYPE" != "darwin"* ]]; then
-    user_args=(--user "$(id -u):$(id -g)")
-  fi
-  
   docker run -it \
-    ${user_args[@]+"${user_args[@]}"} \
     ${port_args[@]+"${port_args[@]}"} \
     --name "$container_name" \
     -v "$host_dir":"/$project" \
@@ -628,16 +621,9 @@ cmd_upgrade() {
     # Remove old container
     docker rm -f "$container_name" >/dev/null 2>&1
     
-    # On Linux, run as host user to avoid permission issues
-    local user_args=()
-    if [[ "$OSTYPE" != "darwin"* ]]; then
-      user_args=(--user "$(id -u):$(id -g)")
-    fi
-    
     # Recreate container with same mounts (in stopped state)
     if ! docker create \
       --name "$container_name" \
-      ${user_args[@]+"${user_args[@]}"} \
       -v "$src_path":"/$proj" \
       -v "$claude_home":"/home/claudex" \
       -w "/$proj" \
@@ -703,16 +689,9 @@ cmd_upgrade() {
       # Remove old container
       docker rm -f "$container" >/dev/null 2>&1
       
-      # On Linux, run as host user to avoid permission issues
-      local user_args=()
-      if [[ "$OSTYPE" != "darwin"* ]]; then
-        user_args=(--user "$(id -u):$(id -g)")
-      fi
-      
       # Recreate container with same mounts (in stopped state)
       if docker create \
         --name "$container" \
-        ${user_args[@]+"${user_args[@]}"} \
         -v "$src_path":"/$proj" \
         -v "$claude_home":"/home/claudex" \
         -w "/$proj" \
