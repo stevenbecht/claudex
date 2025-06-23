@@ -5,6 +5,13 @@ set -euo pipefail
 IMAGE_NAME="claudex-env"
 CONTAINER_PREFIX="claudex_"
 
+# Detect container runtime (Docker or Podman)
+if command -v podman &> /dev/null; then
+    CONTAINER_RUNTIME="podman"
+else
+    CONTAINER_RUNTIME="docker"
+fi
+
 # Get the real path of the script, following symlinks
 SCRIPT_PATH="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
@@ -41,7 +48,8 @@ confirm() {
 # Show detailed help
 show_help() {
   cat << EOF
-Claudex - Docker-based development environment manager
+Claudex - Container-based development environment manager
+Supports both Docker and Podman (Podman detected: $([ "$CONTAINER_RUNTIME" = "podman" ] && echo "yes" || echo "no"))
 
 $(echo -e "${GREEN}Usage:${NC}")
   claudex <command> [options]
@@ -94,13 +102,13 @@ get_container_name() {
 # Check if container exists
 container_exists() {
   local container="$1"
-  docker ps -a --filter "name=^/${container}$" --format "{{.Names}}" | grep -q "^${container}$"
+  $CONTAINER_RUNTIME ps -a --filter "name=^/${container}$" --format "{{.Names}}" | grep -q "^${container}$"
 }
 
 # Check if container is running
 container_running() {
   local container="$1"
-  docker ps --filter "name=^/${container}$" --format "{{.Names}}" | grep -q "^${container}$"
+  $CONTAINER_RUNTIME ps --filter "name=^/${container}$" --format "{{.Names}}" | grep -q "^${container}$"
 }
 
 # Format uptime for display
@@ -185,11 +193,11 @@ cmd_start() {
   if container_exists "$container_name"; then
     if container_running "$container_name"; then
       info "Container '$container_name' is already running. Attaching..."
-      docker exec -it "$container_name" bash
+      $CONTAINER_RUNTIME exec -it "$container_name" bash
     else
       info "Container '$container_name' exists but is stopped. Restarting..."
-      docker start "$container_name" >/dev/null
-      docker exec -it "$container_name" bash
+      $CONTAINER_RUNTIME start "$container_name" >/dev/null
+      $CONTAINER_RUNTIME exec -it "$container_name" bash
     fi
     return
   fi
@@ -219,7 +227,14 @@ cmd_start() {
   info "Environment data: $claude_home"
   [ -z "$ports" ] || info "Port mappings: $ports"
   
-  docker run -it \
+  # Add Podman-specific flags for UID/GID mapping
+  local runtime_flags=()
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    runtime_flags+=(--userns=keep-id)
+  fi
+  
+  $CONTAINER_RUNTIME run -it \
+    ${runtime_flags[@]+"${runtime_flags[@]}"} \
     ${port_args[@]+"${port_args[@]}"} \
     --name "$container_name" \
     -v "$host_dir":"/$project" \
@@ -245,7 +260,7 @@ cmd_stop() {
   fi
   
   if confirm "Stop container '$container_name'?"; then
-    docker stop "$container_name" >/dev/null
+    $CONTAINER_RUNTIME stop "$container_name" >/dev/null
     success "Container '$container_name' stopped"
   else
     info "Operation cancelled"
@@ -264,11 +279,11 @@ cmd_restart() {
   fi
   
   info "Restarting container '$container_name'..."
-  docker restart "$container_name" >/dev/null
+  $CONTAINER_RUNTIME restart "$container_name" >/dev/null
   success "Container restarted"
   
   # Attach to the restarted container
-  docker exec -it "$container_name" bash
+  $CONTAINER_RUNTIME exec -it "$container_name" bash
 }
 
 # Command: remove
@@ -282,7 +297,7 @@ cmd_remove() {
     error "Container '$container_name' does not exist"
   fi
   
-  local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+  local status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container_name")
   local status_msg=""
   
   case "$status" in
@@ -292,7 +307,7 @@ cmd_remove() {
   esac
   
   if confirm "Remove container '$container_name'$status_msg?"; then
-    docker rm -f "$container_name" >/dev/null
+    $CONTAINER_RUNTIME rm -f "$container_name" >/dev/null
     success "Container '$container_name' removed"
   else
     info "Operation cancelled"
@@ -311,9 +326,9 @@ cmd_status() {
       error "Container '$container_name' does not exist"
     fi
     
-    local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
-    local started=$(docker inspect -f '{{.State.StartedAt}}' "$container_name")
-    local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$project"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
+    local status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container_name")
+    local started=$($CONTAINER_RUNTIME inspect -f '{{.State.StartedAt}}' "$container_name")
+    local src_path=$($CONTAINER_RUNTIME inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$project"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
     
     echo -e "\n${GREEN}Project:${NC} $project"
     echo -e "${GREEN}Container:${NC} $container_name"
@@ -322,7 +337,7 @@ cmd_status() {
     echo -e "${GREEN}Started:${NC} $(format_uptime "$started")"
     
     # Show published ports without touching the table
-    local ports_info=$(docker port "$container_name" 2>/dev/null | paste -sd ',' - || echo "none")
+    local ports_info=$($CONTAINER_RUNTIME port "$container_name" 2>/dev/null | paste -sd ',' - || echo "none")
     echo -e "${GREEN}Ports:${NC} $ports_info"
     echo
   else
@@ -333,16 +348,16 @@ cmd_status() {
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Find all claudex containers
-    local containers=$(docker ps -a --filter "name=^${CONTAINER_PREFIX}" --format "{{.Names}}")
+    local containers=$($CONTAINER_RUNTIME ps -a --filter "name=^${CONTAINER_PREFIX}" --format "{{.Names}}")
     
     if [ -z "$containers" ]; then
       echo -e "${YELLOW}No environments found.${NC} Use 'claudex start <project> --dir PATH' to create one."
     else
       for container in $containers; do
         local project="${container#$CONTAINER_PREFIX}"
-        local status=$(docker inspect -f '{{.State.Status}}' "$container")
-        local started=$(docker inspect -f '{{.State.StartedAt}}' "$container")
-        local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$project"'" }}{{ .Source }}{{ end }}{{ end }}' "$container" 2>/dev/null || echo "unknown")
+        local status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container")
+        local started=$($CONTAINER_RUNTIME inspect -f '{{.State.StartedAt}}' "$container")
+        local src_path=$($CONTAINER_RUNTIME inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$project"'" }}{{ .Source }}{{ end }}{{ end }}' "$container" 2>/dev/null || echo "unknown")
         
         # Color code status
         case "$status" in
@@ -393,9 +408,9 @@ cmd_logs() {
   fi
   
   if [ "$follow" = true ]; then
-    docker logs -f "$container_name"
+    $CONTAINER_RUNTIME logs -f "$container_name"
   else
-    docker logs "$container_name"
+    $CONTAINER_RUNTIME logs "$container_name"
   fi
 }
 
@@ -405,7 +420,7 @@ cmd_cleanup() {
   
   if [ "$target" = "--all" ] || [ "$target" = "-a" ]; then
     # Clean all stopped containers
-    local containers=$(docker ps -a --filter "name=^${CONTAINER_PREFIX}" --filter "status=exited" --format "{{.Names}}")
+    local containers=$($CONTAINER_RUNTIME ps -a --filter "name=^${CONTAINER_PREFIX}" --filter "status=exited" --format "{{.Names}}")
     
     if [ -z "$containers" ]; then
       info "No stopped containers to clean up"
@@ -418,7 +433,7 @@ cmd_cleanup() {
     done
     
     if confirm "Remove ALL listed containers?"; then
-      echo "$containers" | xargs -r docker rm >/dev/null
+      echo "$containers" | xargs -r $CONTAINER_RUNTIME rm >/dev/null
       success "Cleanup complete"
     else
       info "Cleanup cancelled"
@@ -431,13 +446,13 @@ cmd_cleanup() {
       error "Container '$container_name' does not exist"
     fi
     
-    local status=$(docker inspect -f '{{.State.Status}}' "$container_name")
+    local status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container_name")
     if [ "$status" != "exited" ]; then
       error "Container '$container_name' is not stopped (status: $status)"
     fi
     
     if confirm "Remove stopped container '$container_name'?"; then
-      docker rm "$container_name" >/dev/null
+      $CONTAINER_RUNTIME rm "$container_name" >/dev/null
       success "Container '$container_name' removed"
     else
       info "Cleanup cancelled"
@@ -453,28 +468,33 @@ cmd_init() {
   echo "Setting up your development environment manager..."
   echo
   
-  # Check Docker is installed
-  if ! command -v docker &> /dev/null; then
-    error "Docker is not installed. Please install Docker first: https://docs.docker.com/get-docker/"
+  # Check container runtime is installed
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    info "Using Podman as container runtime ✓"
+    info "UID/GID mapping will be handled automatically with --userns=keep-id"
+  elif command -v docker &> /dev/null; then
+    info "Using Docker as container runtime ✓"
+  else
+    error "Neither Docker nor Podman is installed. Please install one of them first."
   fi
   
-  # Check if Docker daemon is running
-  if ! docker info &> /dev/null; then
-    error "Docker daemon is not running. Please start Docker and try again."
+  # Check if runtime daemon is running
+  if ! $CONTAINER_RUNTIME info &> /dev/null; then
+    error "$CONTAINER_RUNTIME daemon is not running. Please start $CONTAINER_RUNTIME and try again."
   fi
   
-  info "Docker is installed and running ✓"
+  info "$CONTAINER_RUNTIME is installed and running ✓"
   
   # Check if image already exists
-  if docker images -q "$IMAGE_NAME" &> /dev/null && [ -n "$(docker images -q "$IMAGE_NAME" 2>/dev/null)" ]; then
-    info "Docker image '$IMAGE_NAME' already exists"
+  if $CONTAINER_RUNTIME images -q "$IMAGE_NAME" &> /dev/null && [ -n "$($CONTAINER_RUNTIME images -q "$IMAGE_NAME" 2>/dev/null)" ]; then
+    info "$CONTAINER_RUNTIME image '$IMAGE_NAME' already exists"
     if confirm "Rebuild the image anyway?"; then
       cmd_rebuild
     else
       info "Using existing image"
     fi
   else
-    info "Building Docker image for the first time..."
+    info "Building $CONTAINER_RUNTIME image for the first time..."
     
     # Validate we can find the Dockerfile
     if [ ! -f "$SCRIPT_DIR/Dockerfile" ]; then
@@ -485,13 +505,13 @@ cmd_init() {
     local timestamp=$(date +"%Y%m%d-%H%M%S")
     local versioned_tag="${IMAGE_NAME}:${timestamp}"
     
-    if ! docker build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
-      error "Docker build failed"
+    if ! $CONTAINER_RUNTIME build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
+      error "$CONTAINER_RUNTIME build failed"
     fi
     
     # Tag as production
-    docker tag "$versioned_tag" "$IMAGE_NAME"
-    success "Docker image built successfully"
+    $CONTAINER_RUNTIME tag "$versioned_tag" "$IMAGE_NAME"
+    success "$CONTAINER_RUNTIME image built successfully"
   fi
   
   # Offer to create symlink
@@ -596,8 +616,8 @@ cmd_upgrade() {
     fi
     
     # Get container configuration before removal
-    local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
-    local claude_home=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
+    local src_path=$($CONTAINER_RUNTIME inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
+    local claude_home=$($CONTAINER_RUNTIME inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container_name")
     
     # Validate mount paths
     if [ -z "$src_path" ] || [ -z "$claude_home" ]; then
@@ -619,10 +639,17 @@ cmd_upgrade() {
     fi
     
     # Remove old container
-    docker rm -f "$container_name" >/dev/null 2>&1
+    $CONTAINER_RUNTIME rm -f "$container_name" >/dev/null 2>&1
+    
+    # Add Podman-specific flags for UID/GID mapping
+    local runtime_flags=()
+    if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+      runtime_flags+=(--userns=keep-id)
+    fi
     
     # Recreate container with same mounts (in stopped state)
-    if ! docker create \
+    if ! $CONTAINER_RUNTIME create \
+      ${runtime_flags[@]+"${runtime_flags[@]}"} \
       --name "$container_name" \
       -v "$src_path":"/$proj" \
       -v "$claude_home":"/home/claudex" \
@@ -638,7 +665,7 @@ cmd_upgrade() {
     if [ "$was_running" = true ]; then
       if confirm "Container was running. Start it now?"; then
         info "Starting upgraded container..."
-        docker start -ai "$container_name"
+        $CONTAINER_RUNTIME start -ai "$container_name"
       else
         info "Use 'claudex start $proj' to start the upgraded container"
       fi
@@ -651,7 +678,7 @@ cmd_upgrade() {
   
   if [ "$upgrade_all" = true ]; then
     # Find all claudex containers
-    local containers=$(docker ps -a --filter "name=^${CONTAINER_PREFIX}" --format "{{.Names}}")
+    local containers=$($CONTAINER_RUNTIME ps -a --filter "name=^${CONTAINER_PREFIX}" --format "{{.Names}}")
     
     if [ -z "$containers" ]; then
       info "No containers found to upgrade"
@@ -669,8 +696,8 @@ cmd_upgrade() {
       echo
       
       # Get container configuration before removal
-      local src_path=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container")
-      local claude_home=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container")
+      local src_path=$($CONTAINER_RUNTIME inspect -f '{{ range .Mounts }}{{ if eq .Destination "/'"$proj"'" }}{{ .Source }}{{ end }}{{ end }}' "$container")
+      local claude_home=$($CONTAINER_RUNTIME inspect -f '{{ range .Mounts }}{{ if eq .Destination "/home/claudex" }}{{ .Source }}{{ end }}{{ end }}' "$container")
       
       # Skip if we can't extract mount configuration
       if [ -z "$src_path" ] || [ -z "$claude_home" ]; then
@@ -687,10 +714,17 @@ cmd_upgrade() {
       info "Project directory: $src_path"
       
       # Remove old container
-      docker rm -f "$container" >/dev/null 2>&1
+      $CONTAINER_RUNTIME rm -f "$container" >/dev/null 2>&1
+      
+      # Add Podman-specific flags for UID/GID mapping
+      local runtime_flags=()
+      if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+        runtime_flags+=(--userns=keep-id)
+      fi
       
       # Recreate container with same mounts (in stopped state)
-      if docker create \
+      if $CONTAINER_RUNTIME create \
+        ${runtime_flags[@]+"${runtime_flags[@]}"} \
         --name "$container" \
         -v "$src_path":"/$proj" \
         -v "$claude_home":"/home/claudex" \
@@ -718,7 +752,7 @@ cmd_upgrade() {
         for proj in "${running_containers[@]}"; do
           local container_name=$(get_container_name "$proj")
           info "Starting $proj..."
-          docker start "$container_name" >/dev/null 2>&1
+          $CONTAINER_RUNTIME start "$container_name" >/dev/null 2>&1
         done
         info "All previously running containers have been started"
       else
@@ -754,31 +788,31 @@ cmd_qdrant() {
   case "$action" in
     start)
       info "Starting Qdrant in project '$project'..."
-      docker exec -it "$container_name" qdrant-manager start "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager start "$@"
       ;;
     stop)
       info "Stopping Qdrant in project '$project'..."
-      docker exec -it "$container_name" qdrant-manager stop "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager stop "$@"
       ;;
     restart)
       info "Restarting Qdrant in project '$project'..."
-      docker exec -it "$container_name" qdrant-manager restart "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager restart "$@"
       ;;
     status)
-      docker exec -it "$container_name" qdrant-manager status "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager status "$@"
       ;;
     logs)
-      docker exec -it "$container_name" qdrant-manager logs "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager logs "$@"
       ;;
     install)
       info "Installing Qdrant in project '$project'..."
-      docker exec -it "$container_name" qdrant-manager install "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager install "$@"
       ;;
     clean)
-      docker exec -it "$container_name" qdrant-manager clean "$@"
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager clean "$@"
       ;;
     help|--help|-h)
-      docker exec -it "$container_name" qdrant-manager help
+      $CONTAINER_RUNTIME exec -it "$container_name" qdrant-manager help
       ;;
     *)
       error "Unknown qdrant action: $action. Valid actions: start, stop, restart, status, logs, install, clean, help"
@@ -809,26 +843,26 @@ cmd_rebuild() {
     error "Cannot find Dockerfile at $SCRIPT_DIR/Dockerfile"
   fi
   
-  info "Rebuilding Docker image in: $SCRIPT_DIR"
+  info "Rebuilding $CONTAINER_RUNTIME image in: $SCRIPT_DIR"
   
   # Generate timestamp tag
   local timestamp=$(date +"%Y%m%d-%H%M%S")
   local versioned_tag="${IMAGE_NAME}:${timestamp}"
   
   # Check if old image exists
-  if docker images -q "$IMAGE_NAME" >/dev/null 2>&1; then
+  if $CONTAINER_RUNTIME images -q "$IMAGE_NAME" >/dev/null 2>&1; then
     info "Current image found, will rebuild with version tag: $timestamp"
   fi
   
   # Build with version tag
   info "Building new image: $versioned_tag"
-  if ! docker build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
+  if ! $CONTAINER_RUNTIME build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
     error "Docker build failed"
   fi
   
   # Tag as latest (production)
   info "Tagging as production: $IMAGE_NAME"
-  docker tag "$versioned_tag" "$IMAGE_NAME"
+  $CONTAINER_RUNTIME tag "$versioned_tag" "$IMAGE_NAME"
   
   success "Image rebuilt successfully"
   echo -e "${GREEN}Version:${NC} $versioned_tag"
@@ -839,14 +873,14 @@ cmd_rebuild() {
     info "Keeping last $keep_versions versions"
     
     # Get all claudex-env versions sorted by creation date
-    local all_versions=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^${IMAGE_NAME}:" | grep -E ":[0-9]{8}-[0-9]{6}$" | sort -r)
+    local all_versions=$($CONTAINER_RUNTIME images --format "{{.Repository}}:{{.Tag}}" | grep "^${IMAGE_NAME}:" | grep -E ":[0-9]{8}-[0-9]{6}$" | sort -r)
     local count=0
     
     while IFS= read -r version; do
       count=$((count + 1))
       if [ $count -gt $keep_versions ]; then
         info "Removing old version: $version"
-        docker rmi "$version" >/dev/null 2>&1 || true
+        $CONTAINER_RUNTIME rmi "$version" >/dev/null 2>&1 || true
       fi
     done <<< "$all_versions"
   fi
@@ -854,7 +888,7 @@ cmd_rebuild() {
   # Show final image list
   echo
   echo -e "${GREEN}Available images:${NC}"
-  docker images --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}\t{{.Size}}" | grep "^${IMAGE_NAME}" || true
+  $CONTAINER_RUNTIME images --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}\t{{.Size}}" | grep "^${IMAGE_NAME}" || true
 }
 
 # Main command dispatcher
