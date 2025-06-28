@@ -220,8 +220,19 @@ generate_mcp_config() {
   if [ -n "$project" ]; then
     local project_config_dir=$(get_mcp_project_config_dir "$project")
     if [ -f "$project_config_dir/config.json" ]; then
-      # TODO: Implement configuration merging
-      echo -e "${YELLOW}Note:${NC} Project-specific configs not yet implemented" >&2
+      # Merge project-specific configuration
+      local project_config=$(cat "$project_config_dir/config.json")
+      
+      # Deep merge the configurations using jq
+      # Project config takes precedence over registry config
+      config=$(echo "$config" | jq --argjson proj "$project_config" '
+        . as $base |
+        $proj as $overlay |
+        $base * $overlay |
+        .mcpServers = ($base.mcpServers // {} | . * ($overlay.mcpServers // {}))
+      ')
+      
+      echo -e "${GREEN}✓${NC} Applied project-specific MCP configuration" >&2
     fi
   fi
   

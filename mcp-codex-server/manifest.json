@@ -1,0 +1,19 @@
+{
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "codex",
+    "version": "1.0.0",
+    "description": "Code review and consultation via Codex",
+    "author": "Claudex Team",
+    "license": "MIT"
+  },
+  "server": {
+    "command": "mcp-codex-wrapper",
+    "args": [],
+    "env": {
+      "NODE_ENV": "production"
+    },
+    "capabilities": ["tools"],
+    "requiredEnv": ["OPENAI_API_KEY"]
+  }
+}
