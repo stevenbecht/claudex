@@ -62,6 +62,7 @@ $(echo -e "${GREEN}Commands:${NC}")
   logs <project> [--follow]     View container logs (--follow for live logs)
   cleanup [--all | project]     Remove stopped containers
   qdrant <project> <action>     Manage Qdrant in a project (start/stop/status/logs)
+  mcp <action>                  Manage MCP servers (list/status/enable/disable)
   help                          Show this help message
 
 $(echo -e "${GREEN}Examples:${NC}")
@@ -75,6 +76,8 @@ $(echo -e "${GREEN}Examples:${NC}")
   claudex cleanup --all                        # Clean all stopped containers
   claudex qdrant myapp start                   # Start Qdrant in project
   claudex qdrant myapp status                  # Check Qdrant status
+  claudex mcp list                             # List available MCP servers
+  claudex mcp status                           # Show MCP configuration status
 
 $(echo -e "${GREEN}Environment Details:${NC}")
   - Each project runs in a container named '${CONTAINER_PREFIX}<project>'
@@ -788,6 +791,117 @@ cmd_qdrant() {
   esac
 }
 
+# Command: mcp - MCP (Model Context Protocol) server management
+cmd_mcp() {
+  [ $# -lt 1 ] && error "Usage: claudex mcp <action> [options]"
+  
+  local action="$1"
+  shift
+  
+  case "$action" in
+    list)
+      cmd_mcp_list "$@"
+      ;;
+    status)
+      cmd_mcp_status "$@"
+      ;;
+    enable)
+      error "MCP enable command not yet implemented"
+      ;;
+    disable)
+      error "MCP disable command not yet implemented"
+      ;;
+    config)
+      error "MCP config command not yet implemented"
+      ;;
+    help|--help|-h)
+      echo "Usage: claudex mcp <action> [options]"
+      echo
+      echo "MCP (Model Context Protocol) server management"
+      echo
+      echo "Actions:"
+      echo "  list              List all available MCP servers"
+      echo "  status            Show status of enabled MCP servers"
+      echo "  enable <server>   Enable an MCP server (not yet implemented)"
+      echo "  disable <server>  Disable an MCP server (not yet implemented)"
+      echo "  config <server>   Configure an MCP server (not yet implemented)"
+      echo "  help              Show this help message"
+      ;;
+    *)
+      error "Unknown mcp action: $action. Use 'claudex mcp help' for usage."
+      ;;
+  esac
+}
+
+# Command: mcp list - List available MCP servers
+cmd_mcp_list() {
+  # Source MCP utilities if available
+  if [ -f "/opt/mcp-utils.sh" ]; then
+    source /opt/mcp-utils.sh
+  else
+    error "MCP utilities not found. This command requires being inside a Claudex container."
+  fi
+  
+  info "Available MCP servers:"
+  echo
+  
+  local servers=$(list_mcp_servers)
+  if [ -n "$servers" ]; then
+    while IFS= read -r server; do
+      local server_name=$(basename "$server")
+      local server_type=$(dirname "$server")
+      
+      # Get metadata if available
+      if metadata=$(get_mcp_server_metadata "$server_name" 2>/dev/null); then
+        local version=$(echo "$metadata" | jq -r '.metadata.version // "unknown"')
+        local description=$(echo "$metadata" | jq -r '.metadata.description // "No description"')
+        
+        echo -e "${GREEN}$server_name${NC} (v$version) - $server_type"
+        echo "  $description"
+      else
+        echo -e "${GREEN}$server_name${NC} - $server_type"
+      fi
+    done <<< "$servers"
+  else
+    echo "No MCP servers found."
+  fi
+}
+
+# Command: mcp status - Show status of enabled MCP servers
+cmd_mcp_status() {
+  info "MCP Configuration Status:"
+  echo
+  
+  # Check if MCP config exists
+  if [ -f "$HOME/.mcp.json" ]; then
+    echo -e "${GREEN}Configuration file:${NC} ~/.mcp.json"
+    echo
+    echo "Enabled servers:"
+    
+    # Parse the MCP configuration
+    local servers=$(jq -r '.mcpServers | keys[]' "$HOME/.mcp.json" 2>/dev/null)
+    if [ -n "$servers" ]; then
+      while IFS= read -r server; do
+        local command=$(jq -r ".mcpServers.\"$server\".command" "$HOME/.mcp.json")
+        echo -e "  ${GREEN}$server${NC} - Command: $command"
+      done <<< "$servers"
+    else
+      echo "  No servers enabled"
+    fi
+  else
+    echo -e "${YELLOW}No MCP configuration found.${NC}"
+    echo "MCP configuration is generated automatically when entering a Claudex container."
+  fi
+  
+  # Show registry location
+  echo
+  if [ -n "$CLAUDEX_MCP_REGISTRY" ]; then
+    echo -e "${GREEN}Registry location:${NC} $CLAUDEX_MCP_REGISTRY"
+  else
+    echo -e "${GREEN}Registry location:${NC} /opt/mcp-servers (default)"
+  fi
+}
+
 # Command: rebuild
 cmd_rebuild() {
   local keep_versions=3
@@ -899,6 +1013,9 @@ main() {
       ;;
     qdrant)
       cmd_qdrant "$@"
+      ;;
+    mcp)
+      cmd_mcp "$@"
       ;;
     help|--help|-h)
       show_help
