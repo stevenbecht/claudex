@@ -3,12 +3,24 @@
 # Docker entrypoint script for Claudex containers
 # This ensures Qdrant auto-start works regardless of how the container is entered
 
+# Source MCP utilities if available
+if [ -f "/opt/mcp-utils.sh" ]; then
+  source /opt/mcp-utils.sh
+fi
+
 # Function to ensure MCP configuration exists
 ensure_mcp_config() {
-  # Check if .mcp.json already exists in home directory
-  if [ ! -f "$HOME/.mcp.json" ]; then
-    # Create the MCP configuration for Codex server
-    cat > "$HOME/.mcp.json" << 'EOF'
+  # If MCP utilities are available, use them to generate config
+  if command -v generate_mcp_config >/dev/null 2>&1; then
+    # Check MCP registry exists
+    if check_mcp_registry >/dev/null 2>&1; then
+      # Generate MCP configuration from registry
+      generate_mcp_config "$HOME/.mcp.json" >/dev/null 2>&1
+    else
+      echo "Warning: MCP registry not found, using fallback configuration"
+      # Fallback to basic configuration
+      if [ ! -f "$HOME/.mcp.json" ]; then
+        cat > "$HOME/.mcp.json" << 'EOF'
 {
   "mcpServers": {
     "codex": {
@@ -21,7 +33,27 @@ ensure_mcp_config() {
   }
 }
 EOF
-    echo "✓ MCP configuration initialized at ~/.mcp.json"
+        echo "✓ MCP configuration initialized at ~/.mcp.json"
+      fi
+    fi
+  else
+    # Fallback if utilities not available
+    if [ ! -f "$HOME/.mcp.json" ]; then
+      cat > "$HOME/.mcp.json" << 'EOF'
+{
+  "mcpServers": {
+    "codex": {
+      "command": "mcp-codex-wrapper",
+      "args": [],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
+EOF
+      echo "✓ MCP configuration initialized at ~/.mcp.json"
+    fi
   fi
 }
 

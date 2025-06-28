@@ -16,5 +16,5 @@ if [ -z "$OPENAI_API_KEY" ]; then
     fi
 fi
 
-# Run the MCP server
-exec node /opt/mcp-codex-server/index.js "$@"
+# Run the MCP server from new location
+exec node ${CLAUDEX_MCP_REGISTRY:-/opt/mcp-servers}/core/codex/index.js "$@"

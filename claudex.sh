@@ -225,6 +225,7 @@ cmd_start() {
     -v "$host_dir":"/$project" \
     -v "$claude_home":"/home/claudex" \
     -w "/$project" \
+    ${CLAUDEX_MCP_REGISTRY:+-e "CLAUDEX_MCP_REGISTRY=$CLAUDEX_MCP_REGISTRY"} \
     "$IMAGE_NAME"
 }
 
@@ -628,6 +629,7 @@ cmd_upgrade() {
       -v "$claude_home":"/home/claudex" \
       -w "/$proj" \
       -it \
+      ${CLAUDEX_MCP_REGISTRY:+-e "CLAUDEX_MCP_REGISTRY=$CLAUDEX_MCP_REGISTRY"} \
       "$IMAGE_NAME" >/dev/null 2>&1; then
       error "Failed to recreate container '$container_name' after upgrade"
     fi

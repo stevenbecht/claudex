@@ -34,12 +34,24 @@ RUN chmod +x /usr/local/bin/qdrant-manager
 COPY scripts/cq-wrapper.sh /usr/local/bin/cq
 RUN chmod +x /usr/local/bin/cq
 
-# Set up MCP Codex Server
-COPY mcp-codex-server /opt/mcp-codex-server
-RUN cd /opt/mcp-codex-server && \
+# Set up MCP directory structure
+ENV CLAUDEX_MCP_REGISTRY=/opt/mcp-servers
+RUN mkdir -p ${CLAUDEX_MCP_REGISTRY}/{core,installed,disabled} && \
+    chmod 755 ${CLAUDEX_MCP_REGISTRY} ${CLAUDEX_MCP_REGISTRY}/{core,installed,disabled} && \
+    echo '{"version": "1.0.0", "servers": {}}' > ${CLAUDEX_MCP_REGISTRY}/registry.json && \
+    chmod 644 ${CLAUDEX_MCP_REGISTRY}/registry.json && \
+    chown -R claudex:claudex ${CLAUDEX_MCP_REGISTRY}
+
+# Set up MCP Codex Server in new structure
+COPY mcp-codex-server ${CLAUDEX_MCP_REGISTRY}/core/codex
+RUN cd ${CLAUDEX_MCP_REGISTRY}/core/codex && \
     npm install && \
     chmod +x index.js && \
-    chown -R claudex:claudex /opt/mcp-codex-server
+    chown -R claudex:claudex ${CLAUDEX_MCP_REGISTRY}/core/codex
+
+# Copy MCP utilities
+COPY scripts/mcp-utils.sh /opt/mcp-utils.sh
+RUN chmod +x /opt/mcp-utils.sh
 
 # Copy MCP codex wrapper script
 COPY scripts/mcp-codex-wrapper.sh /usr/local/bin/mcp-codex-wrapper
