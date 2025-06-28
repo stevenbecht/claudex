@@ -3,8 +3,17 @@
 
 set -euo pipefail
 
-# Source MCP utilities
-source /claudex/scripts/mcp-utils.sh
+# Source MCP utilities from /opt/ (available in all containers)
+# This makes the script work regardless of project mount point
+if [ -f "/opt/mcp-utils.sh" ]; then
+  source /opt/mcp-utils.sh
+elif [ -f "$(dirname "$0")/mcp-utils.sh" ]; then
+  # Fallback to script directory if testing outside container
+  source "$(dirname "$0")/mcp-utils.sh"
+else
+  echo "Error: Could not find mcp-utils.sh"
+  exit 1
+fi
 
 echo "=== Testing MCP Registry System ==="
 echo
