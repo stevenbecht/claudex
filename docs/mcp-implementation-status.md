@@ -1,9 +1,9 @@
 # MCP Implementation Status Report
-*Last Updated: 2025-06-28*
+*Last Updated: 2025-06-29*
 
-## Current Status: Phase 1 Complete (Pending Testing)
+## Current Status: Phase 2 In Progress
 
-This document captures the current state of the MCP (Model Context Protocol) implementation for Claudex. **CRITICAL: The Docker image must be rebuilt before testing can proceed.**
+This document captures the current state of the MCP (Model Context Protocol) implementation for Claudex. Phase 1 has been tested and verified working. Phase 2 CLI commands are being implemented.
 
 ## Completed Work
 
@@ -41,9 +41,10 @@ This document captures the current state of the MCP (Model Context Protocol) imp
 ### Phase 1: MCP Registry & Configuration System ✅
 
 #### 1.1 Registry Structure ✅
-- Defined in Dockerfile but NOT YET BUILT
+- Docker image rebuilt and tested
 - Structure: `/opt/mcp-servers/{core,installed,disabled}/`
 - Registry index: `/opt/mcp-servers/registry.json`
+- Codex server successfully migrated to new location
 
 #### 1.2 Configuration Layering ✅
 - Implemented in `generate_mcp_config()` function in `mcp-utils.sh`
@@ -80,51 +81,49 @@ This document captures the current state of the MCP (Model Context Protocol) imp
   - Uses `generate_mcp_config` if MCP utilities exist
   - Falls back to hardcoded config if not
 
-#### Additional Files Created
-- **Created** `scripts/test-mcp-registry.sh` - Test script for validation
+#### Additional Files Created/Modified
+- **Created** `scripts/test-mcp-registry.sh` - Test script for validation (made project-agnostic)
 - **Modified** `scripts/mcp-codex-wrapper.sh` - Updated path to use `$CLAUDEX_MCP_REGISTRY`
+- **Modified** `/opt/mcp-servers/core/codex/index.js` - Fixed argument escaping bug in executeCodex()
 
-## Critical Next Steps
+### Phase 2: CLI Commands & Management 🚧 IN PROGRESS
 
-### 1. EXIT THE CONTAINER
-The current container has the OLD structure. All our changes are in files but the Docker image needs rebuilding.
+#### 2.1 Core MCP Commands
+- ✅ `claudex mcp list` - List all available MCP servers (implemented)
+- ✅ `claudex mcp status` - Show status of enabled MCP servers (implemented)
+- ✅ `claudex mcp help` - Show MCP command help (implemented)
+- ⏳ `claudex mcp enable <server>` - Enable an MCP server (not yet implemented)
+- ⏳ `claudex mcp disable <server>` - Disable an MCP server (not yet implemented)
+- ⏳ `claudex mcp config <server>` - Configure an MCP server (not yet implemented)
 
-### 2. REBUILD THE DOCKER IMAGE
-From the host machine (NOT inside container):
-```bash
-make rebuild
-```
+#### 2.2 Implementation Details
+- Added `cmd_mcp()` function to `claudex.sh` with subcommand routing
+- Implemented `cmd_mcp_list()` - shows available servers with metadata
+- Implemented `cmd_mcp_status()` - shows current MCP configuration
+- Updated main help text to include MCP commands
 
-### 3. START A NEW TEST CONTAINER
-```bash
-claudex start mcp-test --dir /tmp/mcp-test
-```
+## Current Testing Status
 
-### 4. TEST INSIDE THE NEW CONTAINER
-```bash
-# Inside the new container:
-source /opt/mcp-utils.sh
-/claudex/scripts/test-mcp-registry.sh
-```
+### Phase 1 Testing ✅ COMPLETE
+- ✅ `/opt/mcp-servers/` directory exists with proper structure
+- ✅ Codex server is at `/opt/mcp-servers/core/codex/`
+- ✅ `~/.mcp.json` is generated automatically on container start
+- ✅ `source /opt/mcp-utils.sh` works without errors
+- ✅ `test-mcp-registry.sh` passes all tests
+- ✅ MCP tools work in Claude Code (after fixing argument escaping bug)
 
-### 5. VERIFY MCP CONFIGURATION
-```bash
-# Check that MCP config was generated correctly
-cat ~/.mcp.json
+## Known Issues & Solutions
 
-# Verify Codex server is in new location
-ls -la /opt/mcp-servers/core/codex/
-```
+1. **Codex MCP Tool Bug** ✅ FIXED
+   - Issue: Messages were truncated to first word only
+   - Cause: Using `shell: true` with array arguments in spawn()
+   - Solution: Properly escape arguments before passing to shell
 
-## Known Issues & Gotchas
+2. **Project-Agnostic Scripts** ✅ FIXED
+   - Issue: Test script had hardcoded `/claudex/scripts/mcp-utils.sh` path
+   - Solution: Modified to source from `/opt/mcp-utils.sh` which is available in all containers
 
-1. **Container Context**: We made changes inside a container that won't persist. All changes are in the `/claudex` mount, but the `/opt/` structure needs the image rebuild.
-
-2. **Path Changes**: The Codex server will move from `/opt/mcp-codex-server/` to `/opt/mcp-servers/core/codex/` after rebuild.
-
-3. **Testing Confusion**: We created temporary test structures in `/tmp/` which should be ignored. Only test with the real `/opt/mcp-servers/` after rebuild.
-
-4. **Simplified Approach**: We skipped JSON schemas and complex validation per Codex feedback to avoid over-engineering.
+3. **Simplified Approach**: We skipped JSON schemas and complex validation per Codex feedback to avoid over-engineering.
 
 ## Files Modified/Created Summary
 
@@ -135,18 +134,24 @@ ls -la /opt/mcp-servers/core/codex/
 - `/claudex/docs/mcp-implementation-status.md` (this file)
 
 ### Modified Files:
-- `/claudex/claudex.sh` (env var support)
+- `/claudex/claudex.sh` (env var support + MCP CLI commands)
 - `/claudex/Dockerfile` (MCP structure)
 - `/claudex/scripts/docker-entrypoint.sh` (MCP config generation)
 - `/claudex/scripts/mcp-codex-wrapper.sh` (path update)
+- `/opt/mcp-servers/core/codex/index.js` (bug fix)
 
-## Phase 2 Preview
+## Next Steps
 
-Once testing confirms Phase 1 works, Phase 2 will add CLI commands:
-- `claudex mcp list`
-- `claudex mcp enable/disable`
-- `claudex mcp status`
-- etc.
+### Remaining Phase 2 Work
+- Implement `claudex mcp enable <server>` - Add server to ~/.mcp.json
+- Implement `claudex mcp disable <server>` - Remove server from ~/.mcp.json
+- Implement `claudex mcp config show <server>` - Display server configuration
+- Implement `claudex mcp config set <server> <key> <value>` - Update server config
+
+### Phase 3 Preview
+- Create additional MCP servers (Qdrant, CodeQuery, etc.)
+- Implement installation commands for new servers
+- Add scaffolding tools for MCP server development
 
 ## Recovery Instructions
 
@@ -162,10 +167,10 @@ If something goes wrong after leaving this session:
 
 ## Important Notes
 
-- **DO NOT** try to test MCP features without rebuilding the Docker image first
-- **DO NOT** rely on any `/tmp/test-*` directories - these were temporary
-- **REMEMBER** The current container has the old structure at `/opt/mcp-codex-server/`
-- **AFTER REBUILD** The new structure will be at `/opt/mcp-servers/core/codex/`
+- The Docker image has been rebuilt and the new MCP structure is active
+- All MCP servers are located at `/opt/mcp-servers/`
+- The MCP configuration is automatically generated at container startup
+- Use `claudex mcp` commands to manage MCP servers
 
 ## Environment Variables
 
@@ -188,15 +193,6 @@ The following permissions were added to `.claude/settings.local.json` during dev
 3. **mcp-config.sh** - Not created, configuration merging integrated into mcp-utils.sh
 4. **validate-schema.sh** - Not created, using simple validation in mcp-utils.sh
 
-## Testing Checklist
-
-After rebuilding the image, verify:
-- [ ] `/opt/mcp-servers/` directory exists with proper structure
-- [ ] Codex server is at `/opt/mcp-servers/core/codex/`
-- [ ] `~/.mcp.json` is generated automatically on container start
-- [ ] `source /opt/mcp-utils.sh` works without errors
-- [ ] `test-mcp-registry.sh` passes all tests
-- [ ] MCP tools still work in Claude Code
 
 ## Future Documentation Updates Needed
 
