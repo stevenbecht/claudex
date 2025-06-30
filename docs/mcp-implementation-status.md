@@ -1,5 +1,5 @@
 # MCP Implementation Status Report
-*Last Updated: 2025-06-29*
+*Last Updated: 2025-06-30*
 
 ## Current Status: Phase 2 In Progress
 
@@ -125,6 +125,18 @@ This document captures the current state of the MCP (Model Context Protocol) imp
 
 3. **Simplified Approach**: We skipped JSON schemas and complex validation per Codex feedback to avoid over-engineering.
 
+4. **Output Truncation in MCP Mode** ✅ FIXED
+   - Issue: MCP server always used `-q` (quiet) flag, showing only final output
+   - Cause: Hardcoded quiet mode for "Docker compatibility"
+   - Solution: Made quiet mode optional via parameter (default: false)
+   - All MCP tools now accept optional `quiet: boolean` parameter
+
+5. **Buffer Size Limit in MCP Server** ✅ FIXED (2025-06-30)
+   - Issue: Large codex outputs were truncated when using MCP tools
+   - Cause: Default Node.js spawn buffer limit (1MB) was too small
+   - Solution: Increased maxBuffer to 10MB in spawn options
+   - Added specific error handling for buffer overflow with helpful message
+
 ## Files Modified/Created Summary
 
 ### New Files:
@@ -139,6 +151,7 @@ This document captures the current state of the MCP (Model Context Protocol) imp
 - `/claudex/scripts/docker-entrypoint.sh` (MCP config generation)
 - `/claudex/scripts/mcp-codex-wrapper.sh` (path update)
 - `/opt/mcp-servers/core/codex/index.js` (bug fix)
+- `/claudex/mcp-codex-server/index.js` (2025-06-30: removed forced quiet mode, added optional quiet parameter, increased buffer size)
 
 ## Next Steps
 

@@ -50,6 +50,11 @@ class CodexMCPServer {
                 type: 'boolean',
                 description: 'Include CLAUDE.md as project context (default: true)',
                 default: true
+              },
+              quiet: {
+                type: 'boolean',
+                description: 'Use quiet mode - only show final output without conversation (default: false)',
+                default: false
               }
             },
             required: ['prompt']
@@ -64,6 +69,11 @@ class CodexMCPServer {
               question: {
                 type: 'string',
                 description: 'The question or topic to discuss with Codex'
+              },
+              quiet: {
+                type: 'boolean',
+                description: 'Use quiet mode - only show final output without conversation (default: false)',
+                default: false
               }
             },
             required: ['question']
@@ -74,7 +84,13 @@ class CodexMCPServer {
           description: 'Get a summary of the current project state from Codex',
           inputSchema: {
             type: 'object',
-            properties: {}
+            properties: {
+              quiet: {
+                type: 'boolean',
+                description: 'Use quiet mode - only show final output without conversation (default: false)',
+                default: false
+              }
+            }
           }
         },
         {
@@ -105,7 +121,7 @@ class CodexMCPServer {
           case 'codex_consult':
             return await this.handleCodexConsult(args);
           case 'codex_status':
-            return await this.handleCodexStatus();
+            return await this.handleCodexStatus(args);
           case 'codex_history':
             return await this.handleCodexHistory(args);
           default:
@@ -124,7 +140,7 @@ class CodexMCPServer {
     });
   }
 
-  async executeCodex(args) {
+  async executeCodex(args, options = {}) {
     // Check if OPENAI_API_KEY is set
     if (!process.env.OPENAI_API_KEY) {
       // Try to source .env file
@@ -143,11 +159,19 @@ class CodexMCPServer {
     return new Promise((resolve, reject) => {
       // Build the command
       const cmd = 'codex';
-      const cmdArgs = ['-q', ...args]; // Always use quiet mode for Docker compatibility
+      const cmdArgs = [];
+      
+      // Only add quiet flag if explicitly requested
+      if (options.quiet) {
+        cmdArgs.push('-q');
+      }
+      
+      cmdArgs.push(...args);
       
       const proc = spawn(cmd, cmdArgs, {
         env: process.env,
-        shell: true
+        shell: true,
+        maxBuffer: 10 * 1024 * 1024  // 10MB buffer to handle large codex outputs
       });
 
       let stdout = '';
@@ -170,13 +194,17 @@ class CodexMCPServer {
       });
 
       proc.on('error', (err) => {
-        reject(new Error(`Failed to execute codex: ${err.message}`));
+        if (err.code === 'ENOBUFS') {
+          reject(new Error(`Codex output exceeded buffer limit. Try using quiet mode (quiet: true) for very large responses.`));
+        } else {
+          reject(new Error(`Failed to execute codex: ${err.message}`));
+        }
       });
     });
   }
 
   async handleCodexReview(args) {
-    const { prompt, include_project_context = true } = args;
+    const { prompt, include_project_context = true, quiet = false } = args;
     
     const codexArgs = [];
     if (include_project_context && await this.fileExists('CLAUDE.md')) {
@@ -184,7 +212,7 @@ class CodexMCPServer {
     }
     codexArgs.push(prompt);
 
-    const output = await this.executeCodex(codexArgs);
+    const output = await this.executeCodex(codexArgs, { quiet });
     
     return {
       content: [
@@ -197,9 +225,9 @@ class CodexMCPServer {
   }
 
   async handleCodexConsult(args) {
-    const { question } = args;
+    const { question, quiet = false } = args;
     
-    const output = await this.executeCodex([question]);
+    const output = await this.executeCodex([question], { quiet });
     
     return {
       content: [
@@ -211,8 +239,9 @@ class CodexMCPServer {
     };
   }
 
-  async handleCodexStatus() {
-    const output = await this.executeCodex(['summarize the current state of the project']);
+  async handleCodexStatus(args) {
+    const { quiet = false } = args;
+    const output = await this.executeCodex(['summarize the current state of the project'], { quiet });
     
     return {
       content: [
