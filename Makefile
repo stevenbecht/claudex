@@ -10,7 +10,7 @@ all: build
 
 # Build the Docker image
 build:
-	docker build -t $(IMAGE_NAME) -f $(DOCKERFILE) .
+	docker build --no-cache -t $(IMAGE_NAME) -f $(DOCKERFILE) .
 
 # Remove local image
 clean:
