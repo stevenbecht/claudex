@@ -161,10 +161,9 @@ class CodexMCPServer {
       const cmd = 'codex';
       const cmdArgs = [];
       
-      // Only add quiet flag if explicitly requested
-      if (options.quiet) {
-        cmdArgs.push('-q');
-      }
+      // Always use quiet mode in MCP environment
+      // Interactive/raw terminal mode doesn't work with stdio transport
+      cmdArgs.push('-q');
       
       cmdArgs.push(...args);
       
