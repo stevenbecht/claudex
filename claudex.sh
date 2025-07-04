@@ -936,11 +936,14 @@ cmd_rebuild() {
     info "Current image found, will rebuild with version tag: $timestamp"
   fi
   
-  # Build with version tag
+  # Build using Makefile
   info "Building new image: $versioned_tag"
-  if ! docker build -t "$versioned_tag" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"; then
+  if ! (cd "$SCRIPT_DIR" && make build); then
     error "Docker build failed"
   fi
+  
+  # Tag the built image with version
+  docker tag "$IMAGE_NAME" "$versioned_tag"
   
   # Tag as latest (production)
   info "Tagging as production: $IMAGE_NAME"
