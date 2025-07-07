@@ -143,16 +143,38 @@ class CodexMCPServer {
   async executeCodex(args, options = {}) {
     // Check if OPENAI_API_KEY is set
     if (!process.env.OPENAI_API_KEY) {
-      // Try to source .env file
-      const envPath = path.join(process.cwd(), '.env');
+      // Try to source .env file from current directory first
+      const cwdEnvPath = path.join(process.cwd(), '.env');
+      let foundKey = false;
+      
       try {
-        const envContent = await fs.readFile(envPath, 'utf-8');
+        const envContent = await fs.readFile(cwdEnvPath, 'utf-8');
         const match = envContent.match(/OPENAI_API_KEY=(.+)/);
         if (match) {
           process.env.OPENAI_API_KEY = match[1].trim();
+          foundKey = true;
         }
       } catch (err) {
-        throw new Error('OPENAI_API_KEY not found. Please set it in your environment or .env file.');
+        // Current directory .env not found or readable, try home directory
+      }
+      
+      if (!foundKey) {
+        // Try home directory .env as fallback
+        const homeEnvPath = path.join(process.env.HOME || '/home/claudex', '.env');
+        try {
+          const envContent = await fs.readFile(homeEnvPath, 'utf-8');
+          const match = envContent.match(/OPENAI_API_KEY=(.+)/);
+          if (match) {
+            process.env.OPENAI_API_KEY = match[1].trim();
+            foundKey = true;
+          }
+        } catch (err) {
+          // Home directory .env also not found
+        }
+      }
+      
+      if (!foundKey) {
+        throw new Error('OPENAI_API_KEY not found. Please set it in your environment or create a .env file in your current directory or home directory.');
       }
     }
 
