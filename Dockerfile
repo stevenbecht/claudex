@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-venv git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @anthropic-ai/claude-code @openai/codex
+RUN npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
 
 # Create user and give passwordless sudo
 RUN useradd -ms /bin/bash claudex && \
